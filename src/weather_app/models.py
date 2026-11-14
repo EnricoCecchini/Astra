@@ -58,12 +58,14 @@ class AstroSuitabilityScorer:
         combined_weights: tuple[float, float] = (0.60, 0.40),
         ideal_visibility_m: float = 10_000,
         unfavorable_wind_mps: float = 10.0,
+        output_path: str | Path | None = None,
     ) -> None:
         self.weather_weights = self._validate_weights(weather_weights, 4)
         self.astronomy_weights = self._validate_weights(astronomy_weights, 3)
         self.combined_weights = self._validate_weights(combined_weights, 2)
         self.ideal_visibility_m = self._positive(ideal_visibility_m, "ideal_visibility_m")
         self.unfavorable_wind_mps = self._positive(unfavorable_wind_mps, "unfavorable_wind_mps")
+        self.output_path = Path(output_path) if output_path is not None else None
 
     @staticmethod
     def _positive(value: float, name: str) -> float:
@@ -91,12 +93,14 @@ class AstroSuitabilityScorer:
         darkness_suitability: float,
         moonlight_suitability: float,
     ) -> ScoreResult:
-        """Compute scores for one location, target, and observation time.
+        """Compute and append scores for one location, target, and observation time.
 
         ``moonlight_suitability`` is target-dependent: 100 = ideal moonlight
         for the selected celestial object, 0 = completely unsuitable.
         ``darkness_suitability`` is likewise 100 = fully suitable darkness.
         ``timestamp`` must be timezone-aware to avoid ambiguous time-series data.
+        Each successful call appends one row to the configured output CSV.
+        File errors propagate to the caller instead of silently losing history.
         """
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("timestamp must be a timezone-aware datetime")
@@ -121,21 +125,22 @@ class AstroSuitabilityScorer:
             (altitude_score, darkness, moonlight), self.astronomy_weights
         ))
         combined = weather * self.combined_weights[0] + astronomical * self.combined_weights[1]
-        return ScoreResult(
+        result = ScoreResult(
             timestamp, cloud, humidity, visibility, wind, altitude_score, darkness,
             moonlight, weather, astronomical, combined
         )
+        self.append_score(result)
+        return result
 
     def append_score(self, result: ScoreResult, path: str | Path | None = None) -> Path:
-        """Append a result to data/scoring_output.csv, or a custom CSV path.
+        """Append a result to the configured CSV, or an explicit custom path.
 
         Create missing directories and write the header for a new or empty file.
         Existing files must have the same columns as ScoreResult.
         """
-        output = (
-            Path(path) if path is not None
-            else Path(__file__).resolve().parents[2] / "data" / "scoring_output.csv"
-        )
+        output = Path(path) if path is not None else self.output_path
+        if output is None:
+            output = Path(__file__).resolve().parents[2] / "data" / "scoring_output.csv"
         row = asdict(result)
         row["timestamp"] = result.timestamp.isoformat()
         columns = list(row)

@@ -5,22 +5,45 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from weather_app.models import AstroSuitabilityScorer
 
 
 class ScoringCsvTests(unittest.TestCase):
     def setUp(self):
-        self.scorer = AstroSuitabilityScorer()
-        self.result = self.scorer.score(
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "history" / "scores.csv"
+        self.scorer = AstroSuitabilityScorer(output_path=self.path)
+        self.inputs = dict(
             timestamp=datetime(2026, 11, 14, 21, tzinfo=timezone.utc),
             cloud_cover_percent=10, relative_humidity_percent=40,
             visibility_m=10000, wind_speed_mps=2, altitude_degrees=60,
             darkness_suitability=95, moonlight_suitability=80,
         )
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.path = Path(self.temp.name) / "history" / "scores.csv"
+        with patch.object(self.scorer, "append_score"):
+            self.result = self.scorer.score(**self.inputs)
+
+    def test_score_automatically_appends_each_result(self):
+        first = self.scorer.score(**self.inputs)
+        second = self.scorer.score(**{**self.inputs, "cloud_cover_percent": 100})
+        with self.path.open(newline="", encoding="utf-8") as file:
+            rows = list(csv.DictReader(file))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(float(rows[0]["combined"]), first.combined)
+        self.assertEqual(float(rows[1]["combined"]), second.combined)
+        self.assertLess(second.combined, first.combined)
+
+    def test_invalid_score_does_not_create_history(self):
+        with self.assertRaises(ValueError):
+            self.scorer.score(**{**self.inputs, "cloud_cover_percent": 101})
+        self.assertFalse(self.path.exists())
+
+    def test_score_reports_persistence_failure(self):
+        with patch.object(self.scorer, "append_score", side_effect=OSError("write failed")):
+            with self.assertRaises(OSError):
+                self.scorer.score(**self.inputs)
 
     def test_append_preserves_rows_and_writes_one_header(self):
         self.assertEqual(self.scorer.append_score(self.result, self.path), self.path)
