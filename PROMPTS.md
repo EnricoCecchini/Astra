@@ -62,3 +62,20 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Planner — visible sites within range
+
+**Asked:** "Create the Planner class and add a method to obtain a list of sites where the selected celestial body can be seen and are within the selected distance range from the user's location."
+
+**Got:**
+- `models.py`: `Site` frozen dataclass (coordinate validation in `__post_init__`, `distance_km()` using `utils.haversine_km`, custom `__repr__`), following the module plan.
+- `sites.py`: `load_sites()` reads `data/sites.csv` into `Site` objects (empty optional columns → `None`).
+- `astronomy.py`: `constellation_centers()` samples the sky on a 1° grid with Skyfield's constellation map and averages each constellation's points (area-weighted) to get an approximate centre; constellations in `CELESTIAL_BODY` now have a `Star` at that centre as `target`, plus their `abbreviation`.
+- `planner.py`: `Planner(sites, celestial_bodies, ephemeris)` with `sites_within()` (Haversine radius filter, nearest first) and `visible_sites(body_name, lat, lon, max_distance_km, when=None)` → list of `SiteVisibility` (site, distance, altitude, azimuth, Sun altitude). Visible = target ≥ 10° above the horizon and Sun ≤ −6° (the Moon is exempt from the darkness rule). Weather is not considered yet.
+- `app.py`: one cached `Planner`; after the location is received, a table of visible sites or a message saying why none qualify.
+
+**Checked:** Constellation centres compared with approximate reference positions (Orion 5.6h/+5°, Crux 12.4h/−60°, Cassiopeia 1.0h/+63°). From Puerta del Sol: 50 km → Madrid centre and Navacerrada (48.2 km); 100 km adds Yebes (53.4 km). On 2026-11-14 at 23:00 local, Orion is rising in the east (az ≈ 104°, alt ≈ 23°) and Saturn is high in the south (alt ≈ 49°); Crux never qualifies at Madrid's latitude; at 13:00 local nothing that needs darkness qualifies. Ran the app headless with `AppTest` and a simulated location: no errors, correct "not visible right now" message at midday.
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---

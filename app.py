@@ -1,18 +1,23 @@
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
-from weather_app.astronomy import load_celestial_bodies
+from weather_app.astronomy import load_celestial_bodies, load_ephemeris
+from weather_app.planner import Planner
+from weather_app.sites import load_sites
 
 st.set_page_config(page_title="Weather Insights", page_icon="\U0001F324️")
 
 
 @st.cache_resource(show_spinner="Loading planets and constellations...")
-def get_celestial_bodies() -> dict[str, dict]:
-    # Cached so the ephemeris is loaded once per server, not on every rerun.
-    return load_celestial_bodies()
+def get_planner() -> Planner:
+    # Cached so the ephemeris, sites and constellation centres are loaded once
+    # per server, not on every rerun.
+    ephemeris = load_ephemeris()
+    return Planner(load_sites(), load_celestial_bodies(ephemeris), ephemeris)
 
 
-CELESTIAL_BODY = get_celestial_bodies()
+planner = get_planner()
+CELESTIAL_BODY = planner.celestial_bodies
 TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100]
 
 st.title("Weather Insights")
@@ -44,6 +49,28 @@ if page == "Live Conditions":
         if "user_location" in st.session_state:
             lat, lon = st.session_state["user_location"]
             st.success(f"Location received: {lat:.4f}, {lon:.4f}")
+
+            visible = planner.visible_sites(selected_body, lat, lon, max_travel_km)
+            if visible:
+                st.subheader(f"Sites where {selected_body} is visible now")
+                st.dataframe(
+                    [
+                        {
+                            "Site": v.site.name,
+                            "Distance (km)": v.distance_km,
+                            "Altitude (°)": v.altitude_deg,
+                            "Azimuth (°)": v.azimuth_deg,
+                        }
+                        for v in visible
+                    ],
+                    hide_index=True,
+                )
+            else:
+                in_range = len(planner.sites_within(lat, lon, max_travel_km))
+                st.info(
+                    f"{selected_body} can't be seen right now from any of the {in_range} "
+                    f"site(s) within {max_travel_km} km: it is too low or the sky is not dark yet."
+                )
         else:
             st.caption(
                 "Waiting for your location. If nothing happens, check that location access "
