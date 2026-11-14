@@ -25,3 +25,14 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     a = sin(d_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(d_lambda / 2) ** 2
     # min() guards against a > 1 from floating-point rounding on antipodal points.
     return 2 * EARTH_RADIUS_KM * asin(min(1.0, sqrt(a)))
+
+
+COMPASS_POINTS = [
+    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+]
+
+
+def compass_point(azimuth_deg: float) -> str:
+    """16-point compass direction for an azimuth (0° = north, 90° = east)."""
+    return COMPASS_POINTS[round(azimuth_deg % 360 / 22.5) % 16]
