@@ -79,3 +79,18 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Scored sites table with sunset times
+
+**Asked:** "Display the scored sites in a table. Display the sunset time for the locations as well so users know when they could go to the site" — clarified as: use placeholder scores from `data/scoring_output.csv` (it has one row and no site column, and no scoring code exists yet).
+
+**Got:**
+- `scoring.py`: `load_sample_scores()` reads the sample row of `data/scoring_output.csv` (placeholder until real per-site scoring exists).
+- `planner.py`: `Planner.sunset_for(site, when)` uses `skyfield.almanac.find_settings` searching from 12 h before `when`, so during the day it returns the coming sunset and at night the one that started the current night; `SiteVisibility` gains `sunset_utc`.
+- `app.py`: Get Sites results table now has Site, Distance, Sunset (in the browser's time zone via `st.context.timezone`, falling back to Europe/Madrid), Altitude, Azimuth, Weather/Astro/Combined score, with a caption saying the scores are sample values.
+
+**Checked:** Madrid sunset on 2026-11-14 = 16:58 UTC (17:58 CET), matching published tables; at 01:00 UTC it returns the previous evening's sunset (16:59 on the 13th) and at 10:00/17:00/23:00 UTC the 14th's. Yebes (further east) sets earlier at 17:55, Teide at 18:13 UTC. Ran the app headless with the clock patched to 22:00 UTC: Saturn within 100 km shows Madrid, Navacerrada and Yebes with sunset times and the sample scores (84.0 / 94.5 / 88.2).
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---

@@ -1,9 +1,14 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.planner import Planner
+from weather_app.scoring import load_sample_scores
 from weather_app.sites import load_sites
+
+DEFAULT_TIMEZONE = "Europe/Madrid"
 
 st.set_page_config(page_title="Weather Insights", page_icon="\U0001F324️")
 
@@ -16,7 +21,16 @@ def get_planner() -> Planner:
     return Planner(load_sites(), load_celestial_bodies(ephemeris), ephemeris)
 
 
+def viewer_timezone() -> ZoneInfo:
+    """The browser's time zone, falling back to Madrid if it is unknown."""
+    try:
+        return ZoneInfo(st.context.timezone or DEFAULT_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
 planner = get_planner()
+SAMPLE_SCORES = load_sample_scores()
 CELESTIAL_BODY = planner.celestial_bodies
 TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100]
 
@@ -62,18 +76,33 @@ if page == "Live Conditions":
             lat, lon = st.session_state["user_location"]
             visible = planner.visible_sites(query_body, lat, lon, query_km)
             if visible:
+                local_tz = viewer_timezone()
+                scores = SAMPLE_SCORES  # placeholder: same sample row for every site
                 st.subheader(f"Sites where {query_body} is visible now")
                 st.dataframe(
                     [
                         {
                             "Site": v.site.name,
                             "Distance (km)": v.distance_km,
+                            "Sunset": (
+                                v.sunset_utc.astimezone(local_tz).strftime("%H:%M")
+                                if v.sunset_utc
+                                else "—"
+                            ),
                             "Altitude (°)": v.altitude_deg,
                             "Azimuth (°)": v.azimuth_deg,
+                            "Weather score": scores["weather"],
+                            "Astro score": scores["astronomical"],
+                            "Combined score": scores["combined"],
                         }
                         for v in visible
                     ],
                     hide_index=True,
+                )
+                st.caption(
+                    f"Sunset times are in {local_tz.key}. Scores are sample values from "
+                    "data/scoring_output.csv, the same for every site until per-site "
+                    "scoring is implemented."
                 )
             else:
                 in_range = len(planner.sites_within(lat, lon, query_km))
