@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
-from weather_app.planner import Planner
+from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.scoring import load_sample_scores
 from weather_app.sites import load_sites
 
@@ -74,41 +74,58 @@ if page == "Live Conditions":
             st.warning("Share your location with the 📍 icon in the sidebar to find nearby sites.")
         else:
             lat, lon = st.session_state["user_location"]
-            visible = planner.visible_sites(query_body, lat, lon, query_km)
-            if visible:
+            outlooks = planner.site_outlooks(query_body, lat, lon, query_km)
+            if not outlooks:
+                st.info(f"There are no observing sites within {query_km} km of your location.")
+            else:
                 local_tz = viewer_timezone()
                 scores = SAMPLE_SCORES  # placeholder: same sample row for every site
-                st.subheader(f"Sites where {query_body} is visible now")
+
+                def local_time(moment):
+                    return moment.astimezone(local_tz).strftime("%a %H:%M")
+
+                def visible_from(outlook):
+                    if outlook.visible_now:
+                        return "Now"
+                    if outlook.window_start_utc:
+                        return local_time(outlook.window_start_utc)
+                    return f"Not in next {LOOKAHEAD_HOURS} h"
+
+                st.subheader(f"{query_body} from sites within {query_km} km")
+                if not any(o.visible_now for o in outlooks):
+                    st.info(
+                        f"{query_body} can't be seen from any of these sites right now. "
+                        "The table shows when it will be."
+                    )
                 st.dataframe(
                     [
                         {
-                            "Site": v.site.name,
-                            "Distance (km)": v.distance_km,
-                            "Sunset": (
-                                v.sunset_utc.astimezone(local_tz).strftime("%H:%M")
-                                if v.sunset_utc
-                                else "—"
+                            "Site": o.site.name,
+                            "Distance (km)": o.distance_km,
+                            "Visible from": visible_from(o),
+                            "Visible until": (
+                                local_time(o.window_end_utc)
+                                if o.window_end_utc
+                                else ("—" if not o.window_start_utc else f"beyond {LOOKAHEAD_HOURS} h")
                             ),
-                            "Altitude (°)": v.altitude_deg,
-                            "Azimuth (°)": v.azimuth_deg,
+                            "Sunset": local_time(o.sunset_utc) if o.sunset_utc else "—",
+                            "Altitude (°)": o.altitude_deg if o.window_start_utc else None,
+                            "Azimuth (°)": o.azimuth_deg if o.window_start_utc else None,
                             "Weather score": scores["weather"],
                             "Astro score": scores["astronomical"],
                             "Combined score": scores["combined"],
                         }
-                        for v in visible
+                        for o in outlooks
                     ],
                     hide_index=True,
                 )
                 st.caption(
-                    f"Sunset times are in {local_tz.key}. Scores are sample values from "
-                    "data/scoring_output.csv, the same for every site until per-site "
-                    "scoring is implemented."
-                )
-            else:
-                in_range = len(planner.sites_within(lat, lon, query_km))
-                st.info(
-                    f"{query_body} can't be seen right now from any of the {in_range} "
-                    f"site(s) within {query_km} km: it is too low or the sky is not dark yet."
+                    f"Times are in {local_tz.key}. Altitude and azimuth are where to look when "
+                    "the body becomes visible. Visible means at least "
+                    f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
+                    "(weather not included). Scores are sample values from "
+                    "data/scoring_output.csv, the same for every site until per-site scoring "
+                    "is implemented."
                 )
     # TODO: let the user add/select locations and display current conditions.
 

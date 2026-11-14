@@ -94,3 +94,17 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Viewing windows for every site in range
+
+**Asked:** "Show the table even if there are no currently available sites. The user must be able to at least see when they will be able to go"
+
+**Got:**
+- `planner.py`: `Planner.site_outlooks(body, lat, lon, max_km, when=None)` returns every site within range (not only those visible now). It samples the next 48 h every 5 minutes (one vectorised Skyfield call per site) and records `visible_now`, the first viewing window (`window_start_utc`, `window_end_utc`) and the altitude/azimuth at the start of that window. Results are ordered: visible now, then earliest window, then distance. `visible_sites()` is now a filter over it.
+- `app.py`: Get Sites always shows the table for sites in range, with "Visible from" ("Now", a local day + time, or "Not in next 48 h"), "Visible until", Sunset, where to look, and the sample scores; a note when nothing is visible right now, and a separate message when no site is within range.
+
+**Checked:** From Puerta del Sol, 100 km, on 2026-11-14 at 13:00 local: Saturn becomes visible at 18:30 local (≈30 min after the 17:58 sunset, when the Sun reaches −6°) until 03:25, rising in the ESE at ≈25°; Orion from ≈21:55; the Moon (no darkness rule) 13:55–20:40; Crux has no window. At 23:00 local Saturn shows "Now" for all three sites and `visible_sites()` still returns 3. Each search takes ≈0.1 s. Ran the app headless with the clock patched to midday: the table shows all three sites with their windows, and a 5 km search from an empty area shows the "no sites within range" message.
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---
