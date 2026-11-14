@@ -64,7 +64,7 @@ def sites_map(
             lon=circle_lons,
             mode="lines",
             line={"color": USER_COLOR, "width": 1.5},
-            name=f"{radius_km} km travel radius",
+            name=f"Travel radius ({radius_km} km)",
             hoverinfo="skip",
         )
     )
@@ -84,6 +84,8 @@ def sites_map(
                 hovertext=[m.hover for m in group],
                 hoverinfo="text",
                 name=status,
+                legendgroup="sites",
+                legendgrouptitle={"text": "Suggested sites"},
             )
         )
 
@@ -91,11 +93,14 @@ def sites_map(
         go.Scattermap(
             lat=[user_lat],
             lon=[user_lon],
-            mode="markers",
+            mode="markers+text",
             marker={"size": 14, "color": USER_COLOR},
-            hovertext=["You are here"],
+            text=["You are here"],
+            textposition="bottom center",
+            textfont={"color": USER_COLOR},
+            hovertext=["Your current location"],
             hoverinfo="text",
-            name="Your location",
+            name="Your current location",
         )
     )
 
