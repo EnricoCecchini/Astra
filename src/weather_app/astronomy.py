@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from skyfield.api import Loader, load_constellation_names
+import numpy as np
+from skyfield.api import (
+    Loader,
+    Star,
+    load_constellation_map,
+    load_constellation_names,
+    position_of_radec,
+)
 from skyfield.jpllib import SpiceKernel
 from skyfield.vectorlib import VectorFunction
 
@@ -41,8 +48,10 @@ def load_celestial_bodies(ephemeris: SpiceKernel | None = None) -> dict[str, dic
     """Build the CELESTIAL_BODY dictionary: display name -> details.
 
     Each value has a ``kind`` ("planet", "moon" or "constellation") and a
-    ``target``: the Skyfield vector for solar-system bodies, or the IAU
-    three-letter abbreviation for constellations (they are areas of sky, not points).
+    ``target`` that Skyfield can observe: the ephemeris vector for solar-system
+    bodies, or a fixed ``Star`` at the constellation's approximate centre
+    (constellations are areas of sky, not points). Constellations also carry
+    their IAU three-letter ``abbreviation``.
     """
     ephemeris = ephemeris or load_ephemeris()
     bodies: dict[str, dict] = {}
@@ -52,7 +61,41 @@ def load_celestial_bodies(ephemeris: SpiceKernel | None = None) -> dict[str, dic
     for name in EXTRA_BODIES:
         bodies[name] = {"kind": "moon", "target": _ephemeris_target(ephemeris, name)}
 
+    centers = constellation_centers()
     for abbreviation, name in sorted(load_constellation_names(), key=lambda pair: pair[1]):
-        bodies[name] = {"kind": "constellation", "target": abbreviation}
+        ra_hours, dec_deg = centers[abbreviation]
+        bodies[name] = {
+            "kind": "constellation",
+            "abbreviation": abbreviation,
+            "target": Star(ra_hours=ra_hours, dec_degrees=dec_deg),
+        }
 
     return bodies
+
+
+def constellation_centers(step_deg: float = 1.0) -> dict[str, tuple[float, float]]:
+    """Approximate centre of each constellation as (RA in hours, Dec in degrees).
+
+    Skyfield only provides a point -> constellation lookup, so the sky is sampled
+    on a regular RA/Dec grid and the unit vectors of each constellation's points
+    are averaged, weighted by cos(Dec) so every sample stands for an equal area.
+    """
+    ra_deg, dec_deg = np.meshgrid(
+        np.arange(step_deg / 2, 360, step_deg), np.arange(-90 + step_deg / 2, 90, step_deg)
+    )
+    ra_deg, dec_deg = ra_deg.ravel(), dec_deg.ravel()
+    names = load_constellation_map()(position_of_radec(ra_deg / 15, dec_deg))
+
+    ra, dec = np.radians(ra_deg), np.radians(dec_deg)
+    weight = np.cos(dec)
+    xyz = np.column_stack((np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)))
+
+    centers = {}
+    for abbreviation in np.unique(names):
+        mask = names == abbreviation
+        x, y, z = (xyz[mask] * weight[mask, None]).sum(axis=0)
+        centers[str(abbreviation)] = (
+            float(np.degrees(np.arctan2(y, x)) % 360 / 15),
+            float(np.degrees(np.arctan2(z, np.hypot(x, y)))),
+        )
+    return centers
