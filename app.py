@@ -20,12 +20,16 @@ page = st.sidebar.radio("View", ["Live Conditions", "Analytics"])
 
 if page == "Live Conditions":
     st.header("Live Conditions")
-    selected_body = st.selectbox("Celestial body", list(CELESTIAL_BODY))
-    max_travel_km = st.selectbox(
-        "Maximum travel distance",
-        TRAVEL_DISTANCE_OPTIONS_KM,
-        format_func=lambda km: f"{km} km",
-    )
+    body_col, distance_col = st.columns(2)
+    with body_col:
+        selected_body = st.selectbox("Celestial body", list(CELESTIAL_BODY))
+    with distance_col:
+        max_travel_km = st.selectbox(
+            "Maximum travel distance",
+            TRAVEL_DISTANCE_OPTIONS_KM,
+            format_func=lambda km: f"{km} km",
+        )
+
     # TODO: let the user add/select locations and display current conditions.
 
 elif page == "Analytics":
