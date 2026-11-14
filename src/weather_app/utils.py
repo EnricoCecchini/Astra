@@ -1,6 +1,7 @@
 """Small, dependency-free helper functions shared across modules."""
 
 from math import asin, cos, radians, sin, sqrt
+from urllib.parse import urlencode
 
 EARTH_RADIUS_KM = 6371.0088  # mean Earth radius (IUGG)
 
@@ -36,3 +37,18 @@ COMPASS_POINTS = [
 def compass_point(azimuth_deg: float) -> str:
     """16-point compass direction for an azimuth (0° = north, 90° = east)."""
     return COMPASS_POINTS[round(azimuth_deg % 360 / 22.5) % 16]
+
+
+def google_maps_directions_url(
+    origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float
+) -> str:
+    """Google Maps link with driving directions from the origin to the destination."""
+    query = urlencode(
+        {
+            "api": 1,
+            "origin": f"{origin_lat},{origin_lon}",
+            "destination": f"{dest_lat},{dest_lon}",
+            "travelmode": "driving",
+        }
+    )
+    return f"https://www.google.com/maps/dir/?{query}"
