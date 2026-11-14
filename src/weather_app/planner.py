@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from skyfield import almanac
 from skyfield.api import load as skyfield_load
 from skyfield.api import wgs84
 from skyfield.jpllib import SpiceKernel
@@ -24,6 +25,7 @@ class SiteVisibility:
     altitude_deg: float
     azimuth_deg: float
     sun_altitude_deg: float
+    sunset_utc: datetime | None  # sunset that starts the current or coming night
 
 
 class Planner:
@@ -50,6 +52,20 @@ class Planner:
         in_range = [(site, site.distance_km(origin_lat, origin_lon)) for site in self.sites]
         in_range = [(site, d) for site, d in in_range if d <= max_distance_km]
         return sorted(in_range, key=lambda pair: pair[1])
+
+    def sunset_for(self, site: Site, when: datetime) -> datetime | None:
+        """Sunset that starts the night around ``when``, in UTC.
+
+        Searches from 12 hours before ``when``: during the day this finds the
+        coming sunset, and at night the sunset that started the current night.
+        Returns None if the Sun does not set in that window (polar regions).
+        """
+        observer = self._earth + wgs84.latlon(
+            site.latitude, site.longitude, elevation_m=site.elevation_m
+        )
+        start = self._timescale.from_datetime(when - timedelta(hours=12))
+        times, _ = almanac.find_settings(observer, self._sun, start, start + 1)
+        return times[0].utc_datetime() if len(times) else None
 
     def visible_sites(
         self,
@@ -97,6 +113,7 @@ class Planner:
                     altitude_deg=round(float(alt.degrees), 1),
                     azimuth_deg=round(float(az.degrees), 1),
                     sun_altitude_deg=round(float(sun_alt.degrees), 1),
+                    sunset_utc=self.sunset_for(site, when),
                 )
             )
         return results
