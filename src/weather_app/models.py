@@ -7,9 +7,11 @@ astronomy module; neither can reliably be inferred from weather alone.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import csv
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from math import isfinite
+from pathlib import Path
 
 from .utils import haversine_km
 
@@ -123,6 +125,37 @@ class AstroSuitabilityScorer:
             timestamp, cloud, humidity, visibility, wind, altitude_score, darkness,
             moonlight, weather, astronomical, combined
         )
+
+    def append_score(self, result: ScoreResult, path: str | Path | None = None) -> Path:
+        """Append a result to data/scoring_output.csv, or a custom CSV path.
+
+        Create missing directories and write the header for a new or empty file.
+        Existing files must have the same columns as ScoreResult.
+        """
+        output = (
+            Path(path) if path is not None
+            else Path(__file__).resolve().parents[2] / "data" / "scoring_output.csv"
+        )
+        row = asdict(result)
+        row["timestamp"] = result.timestamp.isoformat()
+        columns = list(row)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        needs_newline = False
+        if output.exists() and output.stat().st_size:
+            with output.open(newline="", encoding="utf-8") as file:
+                if next(csv.reader(file), None) != columns:
+                    raise ValueError("Scoring CSV header does not match ScoreResult columns")
+            with output.open("rb") as file:
+                file.seek(-1, 2)
+                needs_newline = file.read(1) not in (b"\n", b"\r")
+        with output.open("a", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=columns)
+            if file.tell() == 0:
+                writer.writeheader()
+            elif needs_newline:
+                file.write("\n")
+            writer.writerow(row)
+        return output
 
     @staticmethod
     def _positive_or_zero(value: float, name: str) -> float:
