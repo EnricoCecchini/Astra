@@ -50,3 +50,15 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Confirm button and browser geolocation
+
+**Asked:** "Place the dropdowns on the same line, then add a confirm button. When the confirm button is pressed, prompt the user for access to their location with the streamlit-geolocation library"
+
+**Got:** In `app.py` (Live Conditions): the celestial body and maximum travel distance dropdowns side by side in `st.columns(2)`; a primary "Confirm" button that sets `st.session_state["location_requested"]`; after that, the `streamlit_geolocation()` component plus an instruction, and the shared coordinates stored in `st.session_state["user_location"]` as `(lat, lon)` with a success message. The library only asks the browser for the location when its own icon button is clicked, so the user clicks Confirm and then the location icon.
+
+**Checked:** Ran the app headless with Streamlit's `AppTest`: both dropdowns and the Confirm button render without errors; clicking Confirm sets the flag and shows the instruction and "waiting" caption. The browser permission prompt itself can't be exercised headless — _TODO (student): test in a real browser on localhost (allow and deny)._
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---

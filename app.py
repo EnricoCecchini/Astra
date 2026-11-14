@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies
 
@@ -30,6 +31,24 @@ if page == "Live Conditions":
             format_func=lambda km: f"{km} km",
         )
 
+    if st.button("Confirm", type="primary"):
+        st.session_state["location_requested"] = True
+
+    # Kept in session_state so the location widget stays on screen across reruns.
+    if st.session_state.get("location_requested"):
+        st.write("Click the location icon below and allow access in your browser to share your location.")
+        location = streamlit_geolocation()
+        if location and location.get("latitude") is not None:
+            st.session_state["user_location"] = (location["latitude"], location["longitude"])
+
+        if "user_location" in st.session_state:
+            lat, lon = st.session_state["user_location"]
+            st.success(f"Location received: {lat:.4f}, {lon:.4f}")
+        else:
+            st.caption(
+                "Waiting for your location. If nothing happens, check that location access "
+                "is allowed for this site in your browser settings."
+            )
     # TODO: let the user add/select locations and display current conditions.
 
 elif page == "Analytics":
