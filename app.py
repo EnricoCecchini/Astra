@@ -4,11 +4,14 @@ import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
+from weather_app.maps import SiteMarker, sites_map
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.scoring import load_sample_scores
 from weather_app.sites import load_sites
+from weather_app.utils import compass_point
 
 DEFAULT_TIMEZONE = "Europe/Madrid"
+STATUS_BADGE_COLORS = {"Visible now": "green", "Visible later": "orange", "Not visible soon": "gray"}
 
 st.set_page_config(page_title="Weather Insights", page_icon="\U0001F324️")
 
@@ -90,6 +93,11 @@ if page == "Live Conditions":
                 def local_time(moment):
                     return moment.astimezone(local_tz).strftime("%a %H:%M")
 
+                def status_of(outlook):
+                    if outlook.visible_now:
+                        return "Visible now"
+                    return "Visible later" if outlook.window_start_utc else "Not visible soon"
+
                 def visible_from(outlook):
                     if outlook.visible_now:
                         return "Now"
@@ -97,37 +105,62 @@ if page == "Live Conditions":
                         return local_time(outlook.window_start_utc)
                     return f"Not in next {LOOKAHEAD_HOURS} h"
 
+                def visible_until(outlook):
+                    if outlook.window_end_utc:
+                        return local_time(outlook.window_end_utc)
+                    return f"Beyond {LOOKAHEAD_HOURS} h" if outlook.window_start_utc else "—"
+
+                def score_text(outlook):
+                    # No score for a site where the body never becomes visible.
+                    return f"{scores['combined']:.0f}/100" if outlook.window_start_utc else "—"
+
+                def where_to_look(outlook):
+                    if not outlook.window_start_utc:
+                        return "Stays below the horizon or in daylight"
+                    return (
+                        f"Look {compass_point(outlook.azimuth_deg)} ({outlook.azimuth_deg:.0f}°), "
+                        f"{outlook.altitude_deg:.0f}° above the horizon"
+                    )
+
                 st.subheader(f"{query_body} from sites within {query_km} km")
                 if not any(o.visible_now for o in outlooks):
                     st.info(
                         f"{query_body} can't be seen from any of these sites right now. "
-                        "The table shows when it will be."
+                        "Each site below shows when it will be."
                     )
-                st.dataframe(
-                    [
-                        {
-                            "Site": o.site.name,
-                            "Distance (km)": o.distance_km,
-                            "Visible from": visible_from(o),
-                            "Visible until": (
-                                local_time(o.window_end_utc)
-                                if o.window_end_utc
-                                else ("—" if not o.window_start_utc else f"beyond {LOOKAHEAD_HOURS} h")
-                            ),
-                            "Sunset": local_time(o.sunset_utc) if o.sunset_utc else "—",
-                            "Altitude (°)": o.altitude_deg if o.window_start_utc else None,
-                            "Azimuth (°)": o.azimuth_deg if o.window_start_utc else None,
-                            "Weather score": scores["weather"],
-                            "Astro score": scores["astronomical"],
-                            "Combined score": scores["combined"],
-                        }
-                        for o in outlooks
-                    ],
-                    hide_index=True,
-                )
+
+                markers = [
+                    SiteMarker(
+                        name=o.site.name,
+                        latitude=o.site.latitude,
+                        longitude=o.site.longitude,
+                        status=status_of(o),
+                        hover=(
+                            f"<b>{o.site.name}</b><br>"
+                            f"Score: <b>{score_text(o)}</b><br>"
+                            f"Visible from <b>{visible_from(o)}</b> until <b>{visible_until(o)}</b><br>"
+                            f"{o.distance_km} km away · Sunset {local_time(o.sunset_utc) if o.sunset_utc else '—'}"
+                        ),
+                    )
+                    for o in outlooks
+                ]
+                st.plotly_chart(sites_map(lat, lon, query_km, markers), width="stretch")
+
+                for o in outlooks:
+                    status = status_of(o)
+                    with st.container(border=True):
+                        name_col, badge_col = st.columns([4, 1], vertical_alignment="center")
+                        name_col.markdown(f"**{o.site.name}**")
+                        badge_col.badge(status, color=STATUS_BADGE_COLORS[status])
+                        score_col, from_col, until_col = st.columns(3)
+                        score_col.metric("Score", score_text(o))
+                        from_col.metric("Visible from", visible_from(o))
+                        until_col.metric("Visible until", visible_until(o))
+                        sunset = local_time(o.sunset_utc) if o.sunset_utc else "—"
+                        st.caption(f"{o.distance_km} km away · Sunset {sunset} · {where_to_look(o)}")
+
                 st.caption(
-                    f"Times are in {local_tz.key}. Altitude and azimuth are where to look when "
-                    "the body becomes visible. Visible means at least "
+                    f"Times are in {local_tz.key}. Visible means at least "
                     f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
                     "(weather not included). Scores are sample values from "
                     "data/scoring_output.csv, the same for every site until per-site scoring "

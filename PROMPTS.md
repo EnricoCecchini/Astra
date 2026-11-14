@@ -108,3 +108,18 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Sites map and highlighted site cards
+
+**Asked:** "Instead of a table, display a map with the user's current location pinned, as well as the suggested locations. Hihglight the scoring, and the Visible From and Until values to make the app more intuitive"
+
+**Got:**
+- `maps.py`: `sites_map()` builds a Plotly `Scattermap` (Carto basemap, no API token) with the travel-radius circle, a blue "Your location" pin and site markers coloured by status (green visible now, amber visible later, grey not visible in the next 48 h); hovering a site shows its score, visible from/until, distance and sunset. Helpers `circle_points()` (destination-point formula) and `zoom_for_radius()` (fits the radius circle to the map height).
+- `utils.py`: `compass_point()` turns an azimuth into a 16-point direction (e.g. 113° → ESE).
+- `app.py`: the table is replaced by the map plus one bordered card per site with a status badge and three large metrics — Score, Visible from, Visible until — and a line with distance, sunset and where to look ("Look ESE (113°), 25° above the horizon"). Sites with no viewing window show "—" as score.
+
+**Checked:** Every point of the 50 km circle is 50.0 km from the centre by `haversine_km`; zoom is 12.1 for 5 km and 7.8 for 100 km around Madrid; `compass_point` gives N/N/NNE/E/ESE/SSW/N for 0/11/12/90/112/197.7/359°. Ran the app headless with the clock at 13:00 local: Saturn within 100 km renders one map and cards with "88/100", "Sat 18:25" → "Sun 03:25"; Crux shows "—" and "Not in next 48 h". The map's look in a real browser still needs checking — _TODO (student)._
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---
