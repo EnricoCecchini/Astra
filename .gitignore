@@ -6,3 +6,5 @@ venv/
 .env
 variables.env
 .DS_Store
+
+AstroWeather*
