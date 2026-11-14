@@ -26,3 +26,15 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Haversine distance helper
+
+**Asked:** "Create a utils.py file and add a method to calculate the Haversine distance between 2 sets of coordinates."
+
+**Got:** `src/weather_app/utils.py` with `haversine_km(lat1, lon1, lat2, lon2) -> float` (great-circle distance in km, mean Earth radius 6371.0088 km, rejects out-of-range latitude/longitude with `ValueError`).
+
+**Checked:** Same point → 0 km; 1° of longitude on the equator = 2πR/360 (≈111.195 km); pole to pole and two antipodal equator points = πR; swapping the points gives the same result; Madrid (Sol) → Barcelona (Pl. Catalunya) = 505.2 km, matching the commonly quoted ~505 km straight-line distance; latitude 91 raises `ValueError`.
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---
