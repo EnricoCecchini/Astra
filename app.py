@@ -24,9 +24,22 @@ st.title("Weather Insights")
 
 page = st.sidebar.radio("View", ["Live Conditions", "Analytics"])
 
+# Location sharing lives in the sidebar so it is available from page load
+# without taking space in the main view. streamlit-geolocation only asks the
+# browser for the location when its icon is clicked.
+with st.sidebar:
+    st.caption("📍 Your location")
+    location = streamlit_geolocation()
+    if location and location.get("latitude") is not None:
+        st.session_state["user_location"] = (location["latitude"], location["longitude"])
+    if "user_location" in st.session_state:
+        st.caption("Location shared ✓")
+    else:
+        st.caption("Click the icon and allow access in your browser.")
+
 if page == "Live Conditions":
     st.header("Live Conditions")
-    body_col, distance_col = st.columns(2)
+    body_col, distance_col, button_col = st.columns([3, 2, 1], vertical_alignment="bottom")
     with body_col:
         selected_body = st.selectbox("Celestial body", list(CELESTIAL_BODY))
     with distance_col:
@@ -35,24 +48,21 @@ if page == "Live Conditions":
             TRAVEL_DISTANCE_OPTIONS_KM,
             format_func=lambda km: f"{km} km",
         )
+    with button_col:
+        if st.button("Get Sites", type="primary", width="stretch"):
+            # Remember the query so the results survive later reruns
+            # (e.g. when the location arrives after the click).
+            st.session_state["sites_query"] = (selected_body, max_travel_km)
 
-    if st.button("Confirm", type="primary"):
-        st.session_state["location_requested"] = True
-
-    # Kept in session_state so the location widget stays on screen across reruns.
-    if st.session_state.get("location_requested"):
-        st.write("Click the location icon below and allow access in your browser to share your location.")
-        location = streamlit_geolocation()
-        if location and location.get("latitude") is not None:
-            st.session_state["user_location"] = (location["latitude"], location["longitude"])
-
-        if "user_location" in st.session_state:
+    if "sites_query" in st.session_state:
+        query_body, query_km = st.session_state["sites_query"]
+        if "user_location" not in st.session_state:
+            st.warning("Share your location with the 📍 icon in the sidebar to find nearby sites.")
+        else:
             lat, lon = st.session_state["user_location"]
-            st.success(f"Location received: {lat:.4f}, {lon:.4f}")
-
-            visible = planner.visible_sites(selected_body, lat, lon, max_travel_km)
+            visible = planner.visible_sites(query_body, lat, lon, query_km)
             if visible:
-                st.subheader(f"Sites where {selected_body} is visible now")
+                st.subheader(f"Sites where {query_body} is visible now")
                 st.dataframe(
                     [
                         {
@@ -66,16 +76,11 @@ if page == "Live Conditions":
                     hide_index=True,
                 )
             else:
-                in_range = len(planner.sites_within(lat, lon, max_travel_km))
+                in_range = len(planner.sites_within(lat, lon, query_km))
                 st.info(
-                    f"{selected_body} can't be seen right now from any of the {in_range} "
-                    f"site(s) within {max_travel_km} km: it is too low or the sky is not dark yet."
+                    f"{query_body} can't be seen right now from any of the {in_range} "
+                    f"site(s) within {query_km} km: it is too low or the sky is not dark yet."
                 )
-        else:
-            st.caption(
-                "Waiting for your location. If nothing happens, check that location access "
-                "is allowed for this site in your browser settings."
-            )
     # TODO: let the user add/select locations and display current conditions.
 
 elif page == "Analytics":
