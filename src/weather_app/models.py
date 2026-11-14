@@ -31,6 +31,7 @@ def _clamp(value: float) -> float:
 @dataclass(frozen=True)
 class ScoreResult:
     timestamp: datetime
+    site_id: str
     cloud: float
     humidity: float
     visibility: float
@@ -85,6 +86,7 @@ class AstroSuitabilityScorer:
         self,
         *,
         timestamp: datetime,
+        site_id: str,
         cloud_cover_percent: float,
         relative_humidity_percent: float,
         visibility_m: float,
@@ -99,9 +101,12 @@ class AstroSuitabilityScorer:
         for the selected celestial object, 0 = completely unsuitable.
         ``darkness_suitability`` is likewise 100 = fully suitable darkness.
         ``timestamp`` must be timezone-aware to avoid ambiguous time-series data.
+        ``site_id`` identifies the observing site and must be a nonempty string.
         Each successful call appends one row to the configured output CSV.
         File errors propagate to the caller instead of silently losing history.
         """
+        if not isinstance(site_id, str) or not site_id.strip():
+            raise ValueError("site_id must be a nonempty string")
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("timestamp must be a timezone-aware datetime")
         cloud = 100 - _bounded(cloud_cover_percent, 0, 100, "cloud_cover_percent")
@@ -126,7 +131,7 @@ class AstroSuitabilityScorer:
         ))
         combined = weather * self.combined_weights[0] + astronomical * self.combined_weights[1]
         result = ScoreResult(
-            timestamp, cloud, humidity, visibility, wind, altitude_score, darkness,
+            timestamp, site_id, cloud, humidity, visibility, wind, altitude_score, darkness,
             moonlight, weather, astronomical, combined
         )
         self.append_score(result)

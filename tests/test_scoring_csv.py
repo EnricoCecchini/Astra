@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from weather_app.models import AstroSuitabilityScorer
+from weather_app.scoring import load_sample_scores
 
 
 class ScoringCsvTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class ScoringCsvTests(unittest.TestCase):
         self.scorer = AstroSuitabilityScorer(output_path=self.path)
         self.inputs = dict(
             timestamp=datetime(2026, 11, 14, 21, tzinfo=timezone.utc),
+            site_id="site-001",
             cloud_cover_percent=10, relative_humidity_percent=40,
             visibility_m=10000, wind_speed_mps=2, altitude_degrees=60,
             darkness_suitability=95, moonlight_suitability=80,
@@ -27,10 +29,15 @@ class ScoringCsvTests(unittest.TestCase):
 
     def test_score_automatically_appends_each_result(self):
         first = self.scorer.score(**self.inputs)
-        second = self.scorer.score(**{**self.inputs, "cloud_cover_percent": 100})
+        second = self.scorer.score(**{
+            **self.inputs, "cloud_cover_percent": 100, "site_id": "site-002"
+        })
         with self.path.open(newline="", encoding="utf-8") as file:
             rows = list(csv.DictReader(file))
         self.assertEqual(len(rows), 2)
+        self.assertEqual(first.site_id, "site-001")
+        self.assertEqual(second.site_id, "site-002")
+        self.assertEqual([row["site_id"] for row in rows], ["site-001", "site-002"])
         self.assertEqual(float(rows[0]["combined"]), first.combined)
         self.assertEqual(float(rows[1]["combined"]), second.combined)
         self.assertLess(second.combined, first.combined)
@@ -39,6 +46,19 @@ class ScoringCsvTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.scorer.score(**{**self.inputs, "cloud_cover_percent": 101})
         self.assertFalse(self.path.exists())
+
+    def test_invalid_site_id_does_not_create_history(self):
+        for site_id in ("", "  ", None, 123):
+            with self.subTest(site_id=site_id), self.assertRaises(ValueError):
+                self.scorer.score(**{**self.inputs, "site_id": site_id})
+        self.assertFalse(self.path.exists())
+
+    def test_sample_loader_excludes_site_metadata(self):
+        self.scorer.score(**self.inputs)
+        scores = load_sample_scores(self.path)
+        self.assertNotIn("site_id", scores)
+        self.assertNotIn("timestamp", scores)
+        self.assertAlmostEqual(scores["combined"], 88.2)
 
     def test_score_reports_persistence_failure(self):
         with patch.object(self.scorer, "append_score", side_effect=OSError("write failed")):

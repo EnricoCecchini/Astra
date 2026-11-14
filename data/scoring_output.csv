@@ -1,2 +1,2 @@
-timestamp,cloud,humidity,visibility,wind,altitude,darkness,moonlight,weather,astronomical,combined
-2026-11-14T22:00:00+01:00,90.0,60.0,100.0,80.0,100.0,95.0,80.0,84.0,94.5,88.2
+timestamp,site_id,cloud,humidity,visibility,wind,altitude,darkness,moonlight,weather,astronomical,combined
+2026-11-14T22:00:00+01:00,,90.0,60.0,100.0,80.0,100.0,95.0,80.0,84.0,94.5,88.2

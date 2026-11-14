@@ -17,4 +17,4 @@ def load_sample_scores(path: Path = SAMPLE_SCORES_CSV) -> dict[str, float]:
     """Return the first row of the sample scoring output as {component: score}."""
     with open(path, newline="", encoding="utf-8") as file:
         row = next(csv.DictReader(file))
-    return {key: float(value) for key, value in row.items() if key != "timestamp"}
+    return {key: float(value) for key, value in row.items() if key not in {"timestamp", "site_id"}}
