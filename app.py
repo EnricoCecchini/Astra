@@ -14,11 +14,17 @@ st.set_page_config(page_title="Weather Insights", page_icon="\U0001F324️")
 
 
 @st.cache_resource(show_spinner="Loading planets and constellations...")
-def get_planner() -> Planner:
-    # Cached so the ephemeris, sites and constellation centres are loaded once
-    # per server, not on every rerun.
+def load_astronomy_data():
+    # Only the slow-to-load data is cached (once per server). The Planner itself
+    # is cheap and built on every run, so edits to planner.py take effect
+    # without restarting Streamlit.
     ephemeris = load_ephemeris()
-    return Planner(load_sites(), load_celestial_bodies(ephemeris), ephemeris)
+    return ephemeris, load_celestial_bodies(ephemeris)
+
+
+def get_planner() -> Planner:
+    ephemeris, celestial_bodies = load_astronomy_data()
+    return Planner(load_sites(), celestial_bodies, ephemeris)
 
 
 def viewer_timezone() -> ZoneInfo:
