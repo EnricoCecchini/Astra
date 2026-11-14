@@ -13,4 +13,6 @@ dependencies = [
     "streamlit",
     "pandas",
     "plotly",
+    "streamlit-geolocation>=0.0.10",
+    "skyfield>=1.55",
 ]

@@ -1,0 +1,11 @@
+site_id,name,latitude,longitude,elevation_m,owm_location_id,sky_brightness
+madrid-centro,Madrid (Puerta del Sol),40.4169,-3.7035,657,,
+navacerrada,Puerto de Navacerrada,40.7856,-4.0042,1858,,
+gredos,Plataforma de Gredos,40.2683,-5.2297,1770,,
+yebes,Observatorio de Yebes,40.5247,-3.0886,931,,
+javalambre,Observatorio Astrofísico de Javalambre,40.0418,-1.0162,1957,,
+montsec,Observatori Astronòmic del Montsec,42.0516,0.7293,1570,,
+calar-alto,Observatorio de Calar Alto,37.2236,-2.5461,2168,,
+sierra-nevada,Observatorio de Sierra Nevada,37.0642,-3.3847,2896,,
+teide,Observatorio del Teide,28.3003,-16.5122,2390,,
+roque-muchachos,Observatorio del Roque de los Muchachos,28.7564,-17.8917,2396,,

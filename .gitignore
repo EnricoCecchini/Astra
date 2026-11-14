@@ -6,3 +6,9 @@ venv/
 .env
 variables.env
 .DS_Store
+
+AstroWeather*
+
+# Skyfield ephemeris cache (downloaded on first run)
+data/skyfield/
+*.bsp
