@@ -38,3 +38,15 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Celestial body dropdown (Skyfield)
+
+**Asked:** "Load the list of planets and constellations from the skyfield API library into a CELESTIAL_BODY dictionary on app start and display the names in a dropdown on the Streamlit Live Conditions tab section"
+
+**Got:** `src/weather_app/astronomy.py` with `load_ephemeris()` (downloads JPL DE421 once into `data/skyfield/`, now git-ignored) and `load_celestial_bodies()`, which returns name → `{"kind", "target"}`: the 7 planets plus the Moon map to Skyfield vectors (outer planets fall back to their barycenters, the only form DE421 has), and the 88 IAU constellations from `load_constellation_names()` map to their 3-letter abbreviations. `app.py` builds `CELESTIAL_BODY` at start-up through `st.cache_resource` and shows a "Celestial body" `selectbox` on Live Conditions.
+
+**Checked:** Ran the app headless with Streamlit's `AppTest`: no exceptions, the dropdown has 96 options (7 planets + Moon + 88 constellations, the official IAU count), Jupiter–Neptune resolve to barycenters, and Orion maps to `Ori`.
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---
