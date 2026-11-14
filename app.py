@@ -8,7 +8,7 @@ from weather_app.maps import SiteMarker, sites_map
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.scoring import load_sample_scores
 from weather_app.sites import load_sites
-from weather_app.utils import compass_point
+from weather_app.utils import compass_point, google_maps_directions_url
 
 DEFAULT_TIMEZONE = "Europe/Madrid"
 STATUS_BADGE_COLORS = {"Visible now": "green", "Visible later": "orange", "Not visible soon": "gray"}
@@ -158,6 +158,11 @@ if page == "Live Conditions":
                         until_col.metric("Visible until", visible_until(o))
                         sunset = local_time(o.sunset_utc) if o.sunset_utc else "—"
                         st.caption(f"{o.distance_km} km away · Sunset {sunset} · {where_to_look(o)}")
+                        st.link_button(
+                            "Directions in Google Maps",
+                            google_maps_directions_url(lat, lon, o.site.latitude, o.site.longitude),
+                            icon=":material/directions_car:",
+                        )
 
                 st.caption(
                     f"Times are in {local_tz.key}. Visible means at least "

@@ -123,3 +123,18 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Map legend labels and Google Maps directions
+
+**Asked:** "Add labels to the legends in the map for current location and suggested sites. Redirect the user to google maps with the location set"
+
+**Got:**
+- `maps.py`: legend entries "Your current location" and "Travel radius (N km)", with the site statuses grouped under a "Suggested sites" legend title; a "You are here" text label next to the user's pin.
+- `utils.py`: `google_maps_directions_url(origin_lat, origin_lon, dest_lat, dest_lon)` builds a Google Maps URLs-API link (`/maps/dir/?api=1&origin=…&destination=…&travelmode=driving`).
+- `app.py`: a "Directions in Google Maps" link button on every site card, from the user's location to that site (opens in a new tab).
+
+**Checked:** The figure's traces are "Travel radius (50 km)", the status traces in legend group "sites" titled "Suggested sites", and "Your current location". The generated URL for Madrid → Navacerrada has the right origin/destination. Headless app run: Saturn within 100 km renders 3 link buttons, the first pointing from 40.4169,-3.7035 to Yebes (40.5247,-3.0886). Opening the link in a browser — _TODO (student)._
+
+**Kept as-is / changed / rejected:** _TODO (student): fill in._
+
+---
