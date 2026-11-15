@@ -115,25 +115,34 @@ class WeatherClientTests(unittest.TestCase):
         self.assertEqual(len(messages), 5)
 
     @patch("weather_app.client.requests.get")
-    def test_city_lookup_logs_reading_with_city_coordinates(self, get):
-        get.return_value = self.response({**self.raw, "coord": {"lat": 41.39, "lon": 2.17}})
-        reading = self.client.current_weather_for_city("  Barcelona ")
-        self.assertEqual((reading.latitude, reading.longitude), (41.39, 2.17))
+    def test_geocoding_returns_coordinates_without_logging(self, get):
+        get.return_value = self.response(
+            [{"name": "Barcelona", "lat": 41.39, "lon": 2.17, "country": "ES"}])
+        place = self.client.geocode_city("  Barcelona ")
+        self.assertEqual((place.latitude, place.longitude, place.label), (41.39, 2.17, "Barcelona, ES"))
         self.assertEqual(get.call_args.kwargs["params"]["q"], "Barcelona")
-        with (self.data_dir / "historical_weather.csv").open(newline="", encoding="utf-8") as file:
-            self.assertEqual(len(list(csv.DictReader(file))), 1)
+        self.assertTrue(get.call_args.args[0].endswith("/geo/1.0/direct"))
+        self.assertFalse(self.data_dir.exists())  # nothing was written to the history
 
     @patch("weather_app.client.requests.get")
     def test_unknown_city_reports_not_found(self, get):
-        get.return_value = self.response({"cod": "404"}, 404)
-        with self.assertRaisesRegex(WeatherError, "No city called 'Atlantis'"):
-            self.client.current_weather_for_city("Atlantis")
+        for response in (self.response([]), self.response({"cod": "404"}, 404)):
+            get.return_value = response
+            with self.assertRaisesRegex(WeatherError, "No city called 'Atlantis'"):
+                self.client.geocode_city("Atlantis")
+
+    @patch("weather_app.client.requests.get")
+    def test_bad_geocoding_payload_is_reported(self, get):
+        for payload in ({"name": "x"}, [{"name": "x"}], [{"lat": 95, "lon": 0}]):
+            get.return_value = self.response(payload)
+            with self.subTest(payload=payload), self.assertRaises(WeatherError):
+                self.client.geocode_city("Somewhere")
 
     @patch("weather_app.client.requests.get")
     def test_invalid_city_is_rejected_before_request(self, get):
         for city in ("", "   ", "12345", "Madrid; DROP", "x" * 101, None):
             with self.subTest(city=city), self.assertRaises(ValueError):
-                self.client.current_weather_for_city(city)
+                self.client.geocode_city(city)
         get.assert_not_called()
         self.assertEqual(OpenWeatherClient.validate_city("san  sebastián"), "san sebastián")
 

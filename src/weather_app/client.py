@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from .config import OPEN_WEATHER_BASE_URL, get_api_key
+from .config import OPEN_WEATHER_BASE_URL, OPEN_WEATHER_GEO_URL, get_api_key
 from .storage import DATA_DIR, append_weather
 
 # Letters first, then letters, digits, spaces and common place-name punctuation
@@ -57,6 +57,21 @@ class WeatherReading:
         return [name for name, value in self.scoring_inputs.items() if value is None]
 
 
+@dataclass(frozen=True)
+class Place:
+    """A geocoded place name and its coordinates (no weather attached)."""
+
+    name: str
+    latitude: float
+    longitude: float
+    country: str | None = None
+
+    @property
+    def label(self) -> str:
+        """Display name, e.g. "Granada, ES"."""
+        return f"{self.name}, {self.country}" if self.country else self.name
+
+
 class BaseAPIClient:
     """Reusable JSON GET client with a timeout and safe error messages.
 
@@ -72,11 +87,17 @@ class BaseAPIClient:
         self.timeout = timeout
 
     def get_json(self, endpoint: str, params: dict[str, Any],
-                 not_found_message: str | None = None) -> dict:
-        """GET ``endpoint`` and return its JSON object, raising ``error_type`` on any failure."""
+                 not_found_message: str | None = None, base_url: str | None = None,
+                 expected: type = dict) -> Any:
+        """GET ``endpoint`` and return its JSON body, raising ``error_type`` on any failure.
+
+        ``base_url`` overrides the client's base for services split across hosts or
+        versions; ``expected`` is the JSON type the body must have (object by default).
+        """
         name, error = self.service_name, self.error_type
+        url = f"{(base_url or self.base_url).rstrip('/')}/{endpoint.lstrip('/')}"
         try:
-            response = requests.get(f"{self.base_url}/{endpoint.lstrip('/')}", params=params, timeout=self.timeout)
+            response = requests.get(url, params=params, timeout=self.timeout)
         except requests.Timeout:
             raise error(f"{name} timed out. Please try again.") from None
         except requests.RequestException:
@@ -95,7 +116,7 @@ class BaseAPIClient:
             payload = response.json()
         except ValueError as exc:
             raise error(f"{name} returned invalid JSON.") from exc
-        if not isinstance(payload, dict):
+        if not isinstance(payload, expected):
             raise error(f"{name} returned an unexpected response.")
         return payload
 
@@ -146,21 +167,28 @@ class OpenWeatherClient(BaseAPIClient):
         self._save_readings([reading], "historical_weather.csv")
         return reading
 
-    def current_weather_for_city(self, city: str) -> WeatherReading:
-        """Fetch current conditions by city name; the reading carries the city's coordinates."""
+    def geocode_city(self, city: str) -> Place:
+        """Coordinates for a city name, from the Geocoding API.
+
+        This only resolves a location: it returns no weather and logs nothing,
+        so looking up a city never adds rows to the weather history.
+        """
         city = self.validate_city(city)
-        payload = self.get_json("weather", self._params(q=city),
-                                not_found_message=f"No city called {city!r} was found. Check the spelling.")
-        coord = payload.get("coord")
-        if not isinstance(coord, dict):
-            raise WeatherError("OpenWeather returned incomplete or invalid data.")
-        latitude, longitude = coord.get("lat"), coord.get("lon")
-        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and isfinite(v)
-                   for v in (latitude, longitude)):
-            raise WeatherError("OpenWeather returned incomplete or invalid data.")
-        reading = self._parse(payload, float(latitude), float(longitude), "current")
-        self._save_readings([reading], "historical_weather.csv")
-        return reading
+        not_found = f"No city called {city!r} was found. Check the spelling."
+        matches = self.get_json("direct", self._params(q=city, limit=1), not_found_message=not_found,
+                                base_url=OPEN_WEATHER_GEO_URL, expected=list)
+        if not matches:
+            raise WeatherError(not_found)
+        match = matches[0]
+        try:
+            latitude, longitude = match["lat"], match["lon"]
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and isfinite(v)
+                       and -bound <= v <= bound for v, bound in ((latitude, 90), (longitude, 180))):
+                raise ValueError("Invalid coordinates")
+            return Place(str(match.get("name") or city), float(latitude), float(longitude),
+                         match.get("country") or None)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise WeatherError("OpenWeather returned incomplete or invalid location data.") from exc
 
     def forecast(self, latitude: float, longitude: float) -> list[WeatherReading]:
         """Return the available five-day forecast, typically at three-hour intervals."""

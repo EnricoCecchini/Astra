@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[2] / "variables.env")
 OPEN_WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5"
+OPEN_WEATHER_GEO_URL = "https://api.openweathermap.org/geo/1.0"
 
 
 def get_api_key() -> str:

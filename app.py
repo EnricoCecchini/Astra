@@ -1,18 +1,25 @@
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
+from weather_app import history
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.maps import SiteMarker, sites_map
 from weather_app.models import AstroSuitabilityScorer
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.client import OpenWeatherClient, WeatherError, forecast_for_time
 from weather_app.sites import load_sites
+from weather_app.storage import DATA_DIR
 from weather_app.utils import compass_point, google_maps_directions_url
 
 DEFAULT_TIMEZONE = "Europe/Madrid"
 STATUS_BADGE_COLORS = {"Visible now": "green", "Visible later": "orange", "Not visible soon": "gray"}
+# Saved data older than this gets a "start the collector" warning.
+STALE_CURRENT = timedelta(hours=1)
+STALE_FORECAST = timedelta(hours=6)
+COLLECTOR_HINT = "Start `scripts/collect_weather.py` to record fresher data."
 
 st.set_page_config(page_title="Weather Insights", page_icon="\U0001F324️")
 
@@ -31,27 +38,49 @@ def get_planner() -> Planner:
     return Planner(load_sites(), celestial_bodies, ephemeris)
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def site_forecast(latitude: float, longitude: float):
-    """Reuse successful forecasts for 30 minutes across Streamlit reruns."""
-    return OpenWeatherClient().forecast(latitude, longitude)
+# Only the collector (scripts/collect_weather.py) requests weather from the API.
+# The app reads the latest data it saved, so using the app never adds rows to
+# the history files.
+@st.cache_data(show_spinner=False)
+def _saved_fetches(kind: str, modified: float):
+    """Parse a log once per change of the file (``modified`` is its mtime)."""
+    return history.latest_fetches(kind)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def current_conditions(latitude: float, longitude: float):
-    """Current weather at a point, reused for 10 minutes (each fetch is logged once)."""
-    return OpenWeatherClient().current_weather(latitude, longitude)
+def saved_fetches(kind: str):
+    """Latest saved fetch per location for "current" or "forecast" readings."""
+    try:
+        modified = (DATA_DIR / history.FILES[kind]).stat().st_mtime
+    except OSError:
+        modified = 0.0
+    return _saved_fetches(kind, modified)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def city_conditions(city: str):
-    """Current weather for a city name; the reading carries the city's coordinates."""
-    return OpenWeatherClient().current_weather_for_city(city)
+@st.cache_data(ttl=86400, show_spinner=False)
+def locate_city(city: str):
+    """Coordinates for a city name. Geocoding only: no weather is fetched or saved."""
+    return OpenWeatherClient().geocode_city(city)
 
 
-def show_current_conditions(reading, place: str) -> None:
-    """One row of metrics with the current weather at the user's location."""
-    st.subheader(f"Current conditions at {place}")
+def is_stale(fetched_at: datetime, limit: timedelta) -> bool:
+    return datetime.now(timezone.utc) - fetched_at > limit
+
+
+def show_current_conditions(latitude: float, longitude: float, place: str) -> None:
+    """Latest recorded conditions at the observing site nearest the user."""
+    current = saved_fetches("current")
+    nearby = sorted(
+        ((site.distance_km(latitude, longitude), site) for site in planner.sites
+         if history.location_key(site.latitude, site.longitude) in current),
+        key=lambda pair: pair[0],
+    )
+    if not nearby:
+        st.info(f"No current conditions have been recorded yet. {COLLECTOR_HINT}")
+        return
+    distance, site = nearby[0]
+    fetch = current[history.location_key(site.latitude, site.longitude)]
+    reading = fetch.latest_reading
+    st.subheader(f"Latest recorded conditions near {place}")
 
     def shown(number, unit, digits=0):
         return "—" if number is None else f"{number:.{digits}f} {unit}"
@@ -64,7 +93,10 @@ def show_current_conditions(reading, place: str) -> None:
     visibility_km = None if reading.visibility_m is None else reading.visibility_m / 1000
     columns[4].metric("Visibility", shown(visibility_km, "km", 1))
     st.caption(f"{(reading.description or 'Conditions unavailable').capitalize()} · "
+               f"recorded at {site.name}, {distance:.1f} km away · "
                f"observed {reading.timestamp.astimezone(viewer_timezone()):%a %H:%M}.")
+    if is_stale(fetch.fetched_at, STALE_CURRENT):
+        st.warning(f"This is the most recent reading saved for {site.name}. {COLLECTOR_HINT}")
 
 
 def viewer_timezone() -> ZoneInfo:
@@ -103,13 +135,12 @@ with st.sidebar:
         use_city = st.form_submit_button("Use this city")
     if use_city:
         try:
-            city = OpenWeatherClient.validate_city(city)
-            reading = city_conditions(city)
+            place = locate_city(OpenWeatherClient.validate_city(city))
         except (WeatherError, ValueError) as exc:
             st.error(str(exc))
         else:
-            st.session_state["user_location"] = (reading.latitude, reading.longitude)
-            st.session_state["location_label"] = city
+            st.session_state["user_location"] = (place.latitude, place.longitude)
+            st.session_state["location_label"] = place.label
     if "user_location" in st.session_state:
         st.caption(f"Using {st.session_state.get('location_label', 'your location')} ✓")
     else:
@@ -119,13 +150,8 @@ if page == "Live Conditions":
     st.header("Live Conditions")
     if "user_location" in st.session_state:
         here_lat, here_lon = st.session_state["user_location"]
-        try:
-            # Rounded so small GPS jitter reuses the cached reading.
-            here = current_conditions(round(here_lat, 3), round(here_lon, 3))
-        except (WeatherError, ValueError) as exc:
-            st.warning(f"Current conditions unavailable: {exc}")
-        else:
-            show_current_conditions(here, st.session_state.get("location_label", "your location"))
+        show_current_conditions(here_lat, here_lon,
+                                st.session_state.get("location_label", "your location"))
     else:
         st.info("Share your location with the 📍 icon in the sidebar, or enter a city, "
                 "to see current conditions and nearby observing sites.")
@@ -158,6 +184,8 @@ if page == "Live Conditions":
             else:
                 local_tz = viewer_timezone()
                 forecasts = {}
+                saved_forecasts = saved_fetches("forecast")
+                forecast_saved_at = {}
                 scores = {}
                 score_errors = {}
                 scorer = AstroSuitabilityScorer()
@@ -167,13 +195,15 @@ if page == "Live Conditions":
                 for outlook in outlooks:
                     if outlook.window_start_utc is None:
                         continue
-                    try:
-                        readings = site_forecast(outlook.site.latitude, outlook.site.longitude)
+                    fetch = saved_forecasts.get(
+                        history.location_key(outlook.site.latitude, outlook.site.longitude))
+                    if fetch is None:
                         forecasts[outlook.site.site_id] = (
-                            forecast_for_time(readings, outlook.window_start_utc), None
-                        )
-                    except (WeatherError, ValueError) as exc:
-                        forecasts[outlook.site.site_id] = (None, str(exc))
+                            None, f"no forecast has been recorded for this site yet. {COLLECTOR_HINT}")
+                    else:
+                        forecast_saved_at[outlook.site.site_id] = fetch.fetched_at
+                        forecasts[outlook.site.site_id] = (
+                            forecast_for_time(list(fetch.readings), outlook.window_start_utc), None)
 
                     reading, error = forecasts[outlook.site.site_id]
                     if error or reading is None:
@@ -296,8 +326,13 @@ if page == "Live Conditions":
                             else:
                                 def value(number, unit):
                                     return f"{number:g}{unit}" if number is not None else "Unavailable"
+                                saved_at = forecast_saved_at[o.site.site_id]
+                                if is_stale(saved_at, STALE_FORECAST):
+                                    st.warning(f"This forecast was saved {local_time(saved_at)}. "
+                                               f"{COLLECTOR_HINT}")
                                 st.write(
-                                    f"Forecast at {local_time(reading.timestamp)}: "
+                                    f"Forecast at {local_time(reading.timestamp)} "
+                                    f"(saved {local_time(saved_at)}): "
                                     f"{reading.description or 'Conditions unavailable'} · "
                                     f"Clouds {value(reading.cloud_cover_percent, '%')} · "
                                     f"Humidity {value(reading.humidity_percent, '%')} · "
@@ -315,7 +350,8 @@ if page == "Live Conditions":
                     f"Times are in {local_tz.key}. Visible means at least "
                     f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
                     "(weather not included). Forecasts use the nearest three-hour slot within "
-                    "90 minutes of the start of the viewing window. Scores combine forecast "
+                    "90 minutes of the start of the viewing window, taken from the latest forecast "
+                    "the collector saved. Scores combine forecast "
                     "weather with target altitude, twilight darkness and lunar illumination "
                     "at the viewing-window start. Astronomy suitability uses planning heuristics; "
                     "lunar observing is not penalized for daylight or moonlight."
