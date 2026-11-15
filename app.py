@@ -191,7 +191,14 @@ if page == "Live Conditions":
                 ]
                 st.plotly_chart(sites_map(lat, lon, query_km, markers), width="stretch")
 
-                for o in outlooks:
+                ranked_outlooks = sorted(
+                    outlooks,
+                    key=lambda outlook: (
+                        -scores[outlook.site.site_id].combined
+                        if outlook.site.site_id in scores else float("inf")
+                    ),
+                )
+                for o in ranked_outlooks:
                     status = status_of(o)
                     with st.container(border=True):
                         name_col, badge_col = st.columns([4, 1], vertical_alignment="center")

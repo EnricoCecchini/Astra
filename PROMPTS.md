@@ -282,3 +282,15 @@ combined-score integration.
 **Checked:** Reproduced the live Virgo search from Madrid within 100 km: Navacerrada's later forecast contained humidity 101%, causing the whole forecast to fail. After the fix the same live search showed three scores (31/100, 31/100, 45/100), zero app exceptions and zero warnings. All 17 unittest checks and `git diff --check` passed. Diagnostic scores were saved only to temporary files.
 
 **Kept as-is / changed / rejected:** Kept after verification. Invalid data is skipped rather than altered; valid viewing-time forecasts remain usable.
+
+---
+
+## Feature: Site cards ordered by score
+
+**Asked:** "Order weather insights output cards by score in descending order"
+
+**Got:** Updated `app.py` to render cards by descending combined score, with unscored sites last. Equal scores retain their original planner order.
+
+**Checked:** Reviewed the sort against numeric combined scores and missing-score handling; the existing Streamlit integration check passed. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification.
