@@ -330,3 +330,15 @@ combined-score integration.
 **Checked:** Compared the message with the 90-minute limit in `forecast_for_time()` and ran `git diff --check`.
 
 **Kept as-is / changed / rejected:** Changed the wording to explain the implemented time limit accurately.
+
+---
+
+## Feature: Weather history and observing analytics
+
+**Asked:** Add score history with hourly averages, night shading and a dashed 75 threshold; nighttime site ranking with percentage above 75 and sample count; an 18:00–07:00 site/hour heatmap; latest weighted weather-score components; and a clearly labelled forecast chart combining target altitude and weather score with the best observing windows shaded.
+
+**Got:** Added weather analytics calculations and Plotly chart builders in `analytics.py`, vectorized `Planner.sky_track()`, and `analytics_ui.py`, wired into the Analytics page. Three inner tabs provide Weather Analytics, Location Explorer and Observation Planner. Site and date filters apply to observed history; the planner has site and target selectors and shows tonight's forecast. Scores are derived from raw weather using the scorer's default weights, without generating new score-history rows. Current observations are deduplicated by site and API timestamp. Forecast charts use the latest fetched issue per site with the existing 90-minute matching limit. Solar altitude defines recorded nighttime; the heatmap covers the requested local clock hours. A refresh button reloads the recorded data.
+
+**Checked:** All 24 unittest checks passed. Known values cover hourly averages, nighttime ranking and percentages, weighted contributions summing to 84, observation deduplication and latest forecast issue selection. Chart checks cover threshold lines, ordered ranking, empty heatmap cells, two forecast axes and best-window shading. Streamlit AppTest renders all five charts with controlled nighttime observations and forecasts. The real-data Analytics page runs without exceptions and correctly shows no nighttime ranking until nighttime observations are collected. Existing CSV histories were not modified by tests. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification. Historical charts use observed weather-only S_W; the forecast is labelled separately, and missing data remains blank rather than being filled with invented scores.

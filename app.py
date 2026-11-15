@@ -253,4 +253,5 @@ if page == "Live Conditions":
 
 elif page == "Analytics":
     st.header("Analytics")
-    # TODO: at least 2 charts built from your logged history (see src/weather_app/analytics.py).
+    from weather_app.analytics_ui import render_analytics
+    render_analytics(planner, viewer_timezone())
