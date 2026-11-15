@@ -187,6 +187,18 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 ---
 
+## Feature: Refresh dev and recreate the historical analysis branch
+
+**Asked:** "do a git stash, git pull and finally git stash pop"; "delete the feature/historical-analysis branch"; "create branch feature/historical-analysis".
+
+**Got:** Stashed the local prompt-log and sample-CSV changes, fast-forwarded `dev` to `origin/dev`, and restored the stash. Resolved the `PROMPTS.md` conflict by retaining both sets of entries. Deleted the old local historical-analysis branch, then recreated and selected it from updated `dev`.
+
+**Checked:** Git reported the successful fast-forward, the resolved conflict, the deletion and recreation of the branch. `git diff --cached --check` passed after conflict resolution. The stash was retained as a backup after the conflicted pop.
+
+**Kept as-is / changed / rejected:** Kept the updated base and preserved local work. These operations supersede the original historical-analysis branch base recorded above.
+
+---
+
 ## Feature: Append scoring results to CSV
 
 **Asked:** "add a function to the astrosuitabilityscorer to append the score to the scoring output csv"
@@ -196,6 +208,18 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Checked:** All three unittest checks passed using the bundled Python runtime: repeated appends preserve prior rows and one header, empty files and missing final newlines work, and incompatible headers leave the existing file unchanged. The sample combined score was verified as 88.2. `git diff --check` passed. Tests used temporary files and did not modify the project scoring CSV.
 
 **Kept as-is / changed / rejected:** Kept the implementation after verification. Saving is an explicit call after scoring.
+
+---
+
+## Feature: Focused commit workflow
+
+**Asked:** "from now on do partial commits, to ensure proper verion control"
+
+**Got:** Adopted small commits for completed, verified changes. Committed the CSV append helper separately from automatic score saving, and later separated collection code from live data snapshots. Existing unrelated CSV changes were excluded from feature commits.
+
+**Checked:** Git commit output and status confirmed separate commits and preservation of unrelated working-tree changes.
+
+**Kept as-is / changed / rejected:** Kept as the ongoing version-control workflow. Each logical change is committed after its relevant checks pass.
 
 ---
 
@@ -222,6 +246,17 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** Kept after verification. Site identity is supplied for each scoring call so one scorer can process multiple sites.
 
 ---
+
+## Feature: Publish historical analysis branch changes
+
+**Asked:** "do git push"; "comit and push"
+
+**Got:** Pushed `feature/historical-analysis` to `origin` and established upstream tracking. On the subsequent commit-and-push request, committed the original sample CSV as `de0640e` and collaboration log as `fc96bf8`, then pushed both.
+
+**Checked:** Git confirmed the remote branch creation and later update. The working directory was clean after that commit-and-push operation.
+
+**Kept as-is / changed / rejected:** Kept. Later feature commits are recorded separately; this entry does not imply they have also been pushed.
+
 ---
 
 ## Feature: OpenWeather client and forecast integration
@@ -321,6 +356,18 @@ combined-score integration.
 
 ---
 
+## Feature: Explain unavailable scores
+
+**Asked:** "What makes a score unavailable?"
+
+**Got:** Explained weather-request failures, no valid forecast within 90 minutes of the viewing-window start, missing required weather fields, invalid scoring inputs and CSV persistence failures. Distinguished unavailable scores from a low numeric score, and from the dash shown when there is no viewing window in the next 48 hours. No code was changed for this explanation.
+
+**Checked:** The explanation follows the weather-fetch, forecast-match, input-validation and persistence branches in `app.py`, `client.py` and `models.py`. The subsequent prompt below requested an explicit time-limit message.
+
+**Kept as-is / changed / rejected:** Kept the explanation; the next change clarified the message in the UI.
+
+---
+
 ## Feature: Explain the forecast matching limit
 
 **Asked:** "Specify in the error message that viewing windows are 90 minutes, so that the user knows that in the next 90 minutes there won't be an available score"
@@ -335,13 +382,47 @@ combined-score integration.
 
 ## Feature: Weather history and observing analytics
 
-**Asked:** Add score history with hourly averages, night shading and a dashed 75 threshold; nighttime site ranking with percentage above 75 and sample count; an 18:00–07:00 site/hour heatmap; latest weighted weather-score components; and a clearly labelled forecast chart combining target altitude and weather score with the best observing windows shaded.
+**Asked:** "Create the following visializations in the analytics tab", followed by these requirements (the submitted list was repeated twice; recorded once here):
+
+> Score history (line chart, Weather Analytics page)
+> Shows: S_W over time for the sites the user picks, with night shaded and a dashed line at the 75 threshold.
+> Answers: How have conditions changed at this site, and when did it cross 75?
+> Detail: Average the 5-minute scores into hourly values, or a week of data becomes about 2,000 jittery points per site.
+>
+> Site ranking (horizontal bar chart, Location Explorer page)
+> Shows: Mean nighttime score per site over the same date range, sorted best first. Each bar is labelled with its % of readings above 75 and its sample count (n).
+> Answers: Which site has had the best skies in our recorded data?
+>
+> When is it clear? (heatmap, Weather Analytics page)
+> Shows: One row per site and one column per hour of the night (18:00–07:00). Each cell’s colour is the mean score at that hour.
+> Answers: Is a site usually clear after midnight but cloudy in the evening? 5-minute logging gives enough data for this.
+>
+> Why is this site’s score what it is? (stacked horizontal bars, Location Explorer or Details page)
+> Shows: One bar per site for the latest reading, split into weighted parts (0.50C, 0.20H, 0.15V, 0.15W). The parts add up to S_W because the weights sum to 1.
+> Answers: Is the score low because of cloud, or because of wind and humidity?
+>
+> Tonight’s observing window (line chart with two y-axes, Observation Planner or Details page)
+> Shows: The target’s altitude across the night with the forecast score for the same site laid over it. The best window is shaded where both are high.
+> Answers: What time should I be there?
+> Detail: This chart is forecast plus Skyfield, not history, so label it clearly as a forecast.
 
 **Got:** Added weather analytics calculations and Plotly chart builders in `analytics.py`, vectorized `Planner.sky_track()`, and `analytics_ui.py`, wired into the Analytics page. Three inner tabs provide Weather Analytics, Location Explorer and Observation Planner. Site and date filters apply to observed history; the planner has site and target selectors and shows tonight's forecast. Scores are derived from raw weather using the scorer's default weights, without generating new score-history rows. Current observations are deduplicated by site and API timestamp. Forecast charts use the latest fetched issue per site with the existing 90-minute matching limit. Solar altitude defines recorded nighttime; the heatmap covers the requested local clock hours. A refresh button reloads the recorded data.
 
 **Checked:** All 24 unittest checks passed. Known values cover hourly averages, nighttime ranking and percentages, weighted contributions summing to 84, observation deduplication and latest forecast issue selection. Chart checks cover threshold lines, ordered ranking, empty heatmap cells, two forecast axes and best-window shading. Streamlit AppTest renders all five charts with controlled nighttime observations and forecasts. The real-data Analytics page runs without exceptions and correctly shows no nighttime ranking until nighttime observations are collected. Existing CSV histories were not modified by tests. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification. Historical charts use observed weather-only S_W; the forecast is labelled separately, and missing data remains blank rather than being filled with invented scores.
+
+---
+
+## Feature: Explain data collection and score generation
+
+**Asked:** "Is the weather updated for all sites or just the selected site?"; "Is the scoreing generated every time the data is updated for all sites?"; "Is real api data being used for the live conditions panel or is it stil running on sample data"
+
+**Got:** Explained that the five-minute collector updates current weather and forecasts for all ten configured sites, independent of Analytics selection. Analytics derives weather-only S_W from saved readings when opened or refreshed; the collector does not append combined scoring-history rows. Live Conditions uses real OpenWeather forecasts, cached for 30 minutes, with Skyfield astronomy for the selected target and viewing-window start. It uses forecasts rather than current observations or sample scores. No implementation changes were requested in these questions.
+
+**Checked:** These behaviors correspond to `scripts/collect_weather.py`, `analytics.py`, `analytics_ui.py` and the cached `site_forecast()` and scoring calls in `app.py`.
+
+**Kept as-is / changed / rejected:** Kept the explanations. Combined-score history remains dependent on Live Conditions searches, rather than periodic weather collection.
 
 ---
 
