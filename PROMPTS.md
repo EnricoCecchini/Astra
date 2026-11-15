@@ -435,3 +435,20 @@ combined-score integration.
 **Checked:** All 25 unittest checks passed. Streamlit integration checks confirm the unrestricted search displays ten site cards and the existing 100 km search displays three, with generated scores persisted only to temporary files. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification. All alternatives means the sites configured in data/sites.csv.
+
+---
+
+## Feature: Requirements gap analysis and fixes
+
+**Asked:** "Read the INSTRUCTIONS_README.md file and review the codebase to identify any missing requirement. Write a report to ANALYSIS_REPORT.md with the observations, but do not modify anything", followed by "Create a feature/fixes branch and implement fixes in the codebase suggested in the ANALYSIS_REPORT.md. Do not implement fixes relating to the repo itself, such as missing commits or contributions, etc. Do partial commits for the code changes and commit the updated datasets as well."
+
+**Got:** A local `ANALYSIS_REPORT.md` (git-ignored) mapping each rubric row to evidence in the code, then these fixes on `feature/fixes`:
+- `client.py`: `BaseAPIClient` became provider-neutral, raising a configurable `APIError` subtype with messages built from `service_name`. It now has distinct 404 and 5xx messages. The API key is stored name-mangled (`__api_key`), which replaced an unfinished local rename that imported a nonexistent `get__api_key`. Added `current_weather_for_city()` with input validation before the request, plus `WeatherReading.scoring_inputs` / `missing_scoring_fields` properties.
+- `models.py`: `ScoreResult.rating` property, `__lt__` (ranking with `sorted()`/`max()`), `__str__`, and a logged `computed_at` time. `data/scoring_output.csv` gained the column; older rows have it blank.
+- `app.py`: current conditions on Live Conditions, which removed the last TODO. A city text box is the fallback when geolocation is unavailable. Scores are cached per site, target and forecast slot, so reruns stop appending duplicate rows. Cards show the score rating.
+- `analytics.py`: every chart has a title, and the score axes state their 0–100 scale.
+- Removed the unused placeholder `scoring.py` and the root `sample_scoring_output.csv`. Ignored `*.egg-info/`. Rewrote the README description and the outdated notes.
+
+**Checked:** `uv run python -m unittest discover -s tests` passes 36 tests. New tests cover: a distinct message per failure mode; city lookup, unknown city and invalid input with no request sent; the key not being reachable as `_api_key` and absent from `repr`; rating bands and ordering; `computed_at` logging; current conditions and the city fallback in the app; and no duplicate score rows across reruns. All tests use mocks and temporary files. Not checked in a real browser.
+
+**Kept as-is / changed / rejected:** _Pending team review of `feature/fixes`._
