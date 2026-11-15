@@ -1,4 +1,4 @@
-"""Environment configuration. Boilerplate — no need to change this."""
+"""Configuration for the OpenWeather integration."""
 
 import os
 from pathlib import Path
@@ -6,12 +6,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[2] / "variables.env")
+OPEN_WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5"
 
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-OPEN_WEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5'
 
-if not API_KEY:
-    raise RuntimeError(
-        "OPENWEATHER_API_KEY is not set. Copy variables.env.example to variables.env "
-        "and fill in your own key."
-    )
+def get_api_key() -> str:
+    """Read the local key when a client is created, not on module import."""
+    key = os.getenv("OPENWEATHER_API_KEY", "").strip()
+    if not key or key == "your_key_here":
+        raise ValueError("Set OPENWEATHER_API_KEY in variables.env before requesting weather.")
+    return key
