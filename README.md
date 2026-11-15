@@ -21,8 +21,9 @@ The app has two views:
   - Breakdown of each site's latest score.
   - Forecast chart of tonight's observing window for a chosen site and target.
 
-Weather is fetched **only by the collector** (`scripts/collect_weather.py`), which
-appends every successful API call to a CSV under `data/` with its fetch time. Both
+Weather is fetched **only by the collector**, which the app starts in a background
+thread when it launches (and which `scripts/collect_weather.py` can also run on its
+own). It appends every successful API call to a CSV under `data/` with its fetch time. Both
 views read the latest collected data, so using the app never adds duplicate
 readings, and the analytics run on real accumulated history. The app's only API
 call is geocoding the city name you type: it returns coordinates, and nothing is
@@ -54,19 +55,29 @@ and press **Use this city**. Then choose a target and a travel distance, and pre
 
 ## Collect weather history
 
-The app shows only what the collector has saved, so keep it running. It logs
-current weather and forecasts for every site in `data/sites.csv` immediately and
-then every 5 minutes:
+The app collects weather automatically. When it starts, it launches one background
+thread that saves current weather and forecasts for every site in
+`data/sites.csv` immediately and then every 5 minutes, for as long as the app is
+running. The sidebar shows whether collection is on and when data was last saved.
+Progress is logged in the terminal running Streamlit.
+
+To keep collecting while the app is closed (e.g. overnight), run the same
+collector from a terminal:
 
 ```bash
 uv run python scripts/collect_weather.py              # until Ctrl+C
-uv run python scripts/collect_weather.py --once       # a single collection
+uv run python scripts/collect_weather.py --once       # a single collection now
 uv run python scripts/collect_weather.py --interval 600
 ```
 
-Leave it running across several days **and nights**. The ranking and heatmap
-views only use nighttime readings. Commit the updated CSVs so the history is
-shared.
+A round is skipped if data was already saved less than one interval ago. That means
+the app's thread and the script can run at the same time without saving the same
+weather twice. Set `WEATHER_COLLECTOR=off` before starting the app to disable the
+background thread.
+
+Leave collection running across several days **and nights**. The ranking and
+heatmap views only use nighttime readings. Commit the updated CSVs so the history
+is shared.
 
 ## Run the tests
 
@@ -74,8 +85,9 @@ shared.
 uv run python -m unittest discover -s tests -v
 ```
 
-The tests are offline: API calls are mocked and every file they write goes to a
-temporary directory, so they never change the CSVs in `data/`. Tests that drive the
+The tests are offline: API calls are mocked, the background collector is disabled,
+and every file they write goes to a temporary directory, so they never change the
+CSVs in `data/`. Tests that drive the
 Streamlit app are skipped until the ephemeris has been downloaded (run the app once).
 
 ## Project structure
@@ -91,10 +103,11 @@ Streamlit app are skipped until the ephemeris has been downloaded (run the app o
 │   ├── forecast_weather.csv    # logged forecast snapshots
 │   └── scoring_output.csv      # logged suitability scores
 ├── scripts/
-│   └── collect_weather.py      # periodic weather collector
+│   └── collect_weather.py      # run the collector without the app
 ├── src/weather_app/
 │   ├── config.py               # loads the API key from variables.env
 │   ├── client.py               # BaseAPIClient, OpenWeatherClient, WeatherReading
+│   ├── collector.py            # periodic collection (background thread or script)
 │   ├── storage.py              # appends readings to the CSV history
 │   ├── history.py              # reads the latest collected readings back
 │   ├── models.py               # Site, ScoreResult, AstroSuitabilityScorer
@@ -187,5 +200,6 @@ Stop-Process -Id (Get-Content .weather-collector/collector.pid)
 ```
 
 Check first that the PID still belongs to the collector. The collector runs only
-while the computer is awake and does not restart after a reboot or sign-out. Do not
-start a second instance while one is running.
+while the computer is awake and does not restart after a reboot or sign-out. Extra
+instances (including the app's thread) skip rounds while recent data exists, so
+they do not duplicate rows, but one standalone instance is enough.

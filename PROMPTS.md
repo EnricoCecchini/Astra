@@ -468,3 +468,19 @@ combined-score integration.
 **Checked:** All 42 unittest checks pass. The app tests make any weather HTTP request raise, and assert that it never happens across searches, reruns, current conditions and city lookup. They also cover a site with no saved forecast and an empty history. On the real CSVs, `latest_fetches` finds the latest collector batch for all 10 sites in about 0.06 s.
 
 **Kept as-is / changed / rejected:** _Pending team review._ The clock offset seen in app-logged rows was left alone, as instructed (an OS issue).
+
+---
+
+## Feature: Automatic background collection from the app
+
+**Asked:** "Call the historical_weather script in a separate thread when the app starts so it is being fetched automatically"
+
+**Got:**
+- The collection loop moved from `scripts/collect_weather.py` into a new `src/weather_app/collector.py` so the app can import it: `collect_once`, `run_forever`, `start_background`, `recently_collected`.
+- `app.py` calls `collector.start_background()` on startup. It starts one daemon thread named `weather-collector` per server process. The thread is found by name, so reruns and code reloads never start a second one. The sidebar shows whether collection is on and when data was last saved.
+- Each round is skipped if current weather was saved less than 90 % of an interval ago. This means the app's thread and a terminal collector can run together without duplicate rows. Errors in one round are logged and the loop continues.
+- `scripts/collect_weather.py` is now a thin CLI over the same loop. `WEATHER_COLLECTOR=off` disables the thread. The tests disable it so they never call the API or touch `data/`.
+
+**Checked:** All 49 unittest checks pass, and checksums confirm the files in `data/` are unchanged by the test run. New tests cover recent-data skipping, collecting into the given folder, surviving a missing key and unexpected errors, the thread starting once (daemon, by name), and the disable switch. A live start of the thread skipped its first round because a running collector had saved data 40 seconds earlier.
+
+**Kept as-is / changed / rejected:** _Pending team review._
