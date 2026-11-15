@@ -306,3 +306,15 @@ combined-score integration.
 **Checked:** All 18 unittest checks passed, including repeated appends and separate current/forecast files. Fetched live data for Madrid centre, Navacerrada and Yebes (within 100 km of Madrid): appended 3 current observations and 119 valid forecast slots. Navacerrada's invalid humidity slot was skipped. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification. Logging occurs on fresh API calls; cached Streamlit forecasts do not generate additional API-history rows.
+
+---
+
+## Feature: Five-minute weather collection
+
+**Asked:** "Execute api calls every 5 minutes to build a historical dataset"
+
+**Got:** Added `scripts/collect_weather.py`, which collects both endpoints for all ten configured sites immediately and every 300 seconds. Failed requests do not stop remaining endpoints or sites. Supports `--once` and configurable intervals. Started one hidden local background process, with logs and PID in the git-ignored `.weather-collector/` directory. Documented running and stopping it in README.md.
+
+**Checked:** Confirmed the running process and first live cycle: 20/20 successful requests, 10 current readings and 397 valid forecast slots appended. Log confirms the next cycle is scheduled at the five-minute interval. All 19 unittest checks passed, including continued collection after an endpoint failure.
+
+**Kept as-is / changed / rejected:** Kept and started after verification. Collection runs while the process and computer remain running; it is not configured to restart after reboot.
