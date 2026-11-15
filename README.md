@@ -124,7 +124,25 @@ Streamlit app are skipped until the ephemeris has been downloaded (run the app o
 
 ## Team
 
-<!-- Names and a one-line summary of who worked on what. -->
+### Enrico Cecchini Rivera
+
+Handled project design and ideation, project setup, the Live Conditions planner, and supervision of historical analytics.
+
+### Alejandro Ortega
+
+Handled project design and ideation, the scoring system, and historical analytics.
+
+### Alberto Canto
+
+Handled API integration, weather data modeling, and the data-ingestion workflow.
+
+### Franco Mendoza
+
+Developed automated tests for weather data and scoring.
+
+### Keyla Castellano
+
+Prepared the observing-site dataset and documented the application setup.
 
 ## How it works
 
