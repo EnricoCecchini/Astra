@@ -12,3 +12,6 @@ AstroWeather*
 # Skyfield ephemeris cache (downloaded on first run)
 data/skyfield/
 *.bsp
+
+# Local background weather collector logs and process ID
+.weather-collector/

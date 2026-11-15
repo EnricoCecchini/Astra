@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
+from tempfile import TemporaryDirectory
 
 from weather_app.client import OpenWeatherClient
 from weather_app.models import AstroSuitabilityScorer
@@ -28,8 +29,11 @@ class WeatherScoringContractTests(unittest.TestCase):
         get.return_value = response
         # Exercise the forecast endpoint's list structure and normalization.
         response.json.return_value = {"list": [response.json.return_value]}
-        reading = OpenWeatherClient(api_key="test-key").forecast(40.4169, -3.7035)[0]
-        score = AstroSuitabilityScorer().score(
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        reading = OpenWeatherClient(api_key="test-key", data_dir=temporary.name).forecast(40.4169, -3.7035)[0]
+        score = AstroSuitabilityScorer(output_path=Path(temporary.name) / "scores.csv").score(
+            site_id="test-site",
             timestamp=reading.timestamp,
             cloud_cover_percent=reading.cloud_cover_percent,
             relative_humidity_percent=reading.humidity_percent,

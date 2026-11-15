@@ -7,9 +7,11 @@ astronomy module; neither can reliably be inferred from weather alone.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import csv
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from math import isfinite
+from pathlib import Path
 
 from .utils import haversine_km
 
@@ -29,6 +31,7 @@ def _clamp(value: float) -> float:
 @dataclass(frozen=True)
 class ScoreResult:
     timestamp: datetime
+    site_id: str
     cloud: float
     humidity: float
     visibility: float
@@ -56,12 +59,14 @@ class AstroSuitabilityScorer:
         combined_weights: tuple[float, float] = (0.60, 0.40),
         ideal_visibility_m: float = 10_000,
         unfavorable_wind_mps: float = 10.0,
+        output_path: str | Path | None = None,
     ) -> None:
         self.weather_weights = self._validate_weights(weather_weights, 4)
         self.astronomy_weights = self._validate_weights(astronomy_weights, 3)
         self.combined_weights = self._validate_weights(combined_weights, 2)
         self.ideal_visibility_m = self._positive(ideal_visibility_m, "ideal_visibility_m")
         self.unfavorable_wind_mps = self._positive(unfavorable_wind_mps, "unfavorable_wind_mps")
+        self.output_path = Path(output_path) if output_path is not None else None
 
     @staticmethod
     def _positive(value: float, name: str) -> float:
@@ -81,6 +86,7 @@ class AstroSuitabilityScorer:
         self,
         *,
         timestamp: datetime,
+        site_id: str,
         cloud_cover_percent: float,
         relative_humidity_percent: float,
         visibility_m: float,
@@ -89,13 +95,18 @@ class AstroSuitabilityScorer:
         darkness_suitability: float,
         moonlight_suitability: float,
     ) -> ScoreResult:
-        """Compute scores for one location, target, and observation time.
+        """Compute and append scores for one location, target, and observation time.
 
         ``moonlight_suitability`` is target-dependent: 100 = ideal moonlight
         for the selected celestial object, 0 = completely unsuitable.
         ``darkness_suitability`` is likewise 100 = fully suitable darkness.
         ``timestamp`` must be timezone-aware to avoid ambiguous time-series data.
+        ``site_id`` identifies the observing site and must be a nonempty string.
+        Each successful call appends one row to the configured output CSV.
+        File errors propagate to the caller instead of silently losing history.
         """
+        if not isinstance(site_id, str) or not site_id.strip():
+            raise ValueError("site_id must be a nonempty string")
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("timestamp must be a timezone-aware datetime")
         cloud = 100 - _bounded(cloud_cover_percent, 0, 100, "cloud_cover_percent")
@@ -119,10 +130,42 @@ class AstroSuitabilityScorer:
             (altitude_score, darkness, moonlight), self.astronomy_weights
         ))
         combined = weather * self.combined_weights[0] + astronomical * self.combined_weights[1]
-        return ScoreResult(
-            timestamp, cloud, humidity, visibility, wind, altitude_score, darkness,
+        result = ScoreResult(
+            timestamp, site_id, cloud, humidity, visibility, wind, altitude_score, darkness,
             moonlight, weather, astronomical, combined
         )
+        self.append_score(result)
+        return result
+
+    def append_score(self, result: ScoreResult, path: str | Path | None = None) -> Path:
+        """Append a result to the configured CSV, or an explicit custom path.
+
+        Create missing directories and write the header for a new or empty file.
+        Existing files must have the same columns as ScoreResult.
+        """
+        output = Path(path) if path is not None else self.output_path
+        if output is None:
+            output = Path(__file__).resolve().parents[2] / "data" / "scoring_output.csv"
+        row = asdict(result)
+        row["timestamp"] = result.timestamp.isoformat()
+        columns = list(row)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        needs_newline = False
+        if output.exists() and output.stat().st_size:
+            with output.open(newline="", encoding="utf-8") as file:
+                if next(csv.reader(file), None) != columns:
+                    raise ValueError("Scoring CSV header does not match ScoreResult columns")
+            with output.open("rb") as file:
+                file.seek(-1, 2)
+                needs_newline = file.read(1) not in (b"\n", b"\r")
+        with output.open("a", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=columns)
+            if file.tell() == 0:
+                writer.writeheader()
+            elif needs_newline:
+                file.write("\n")
+            writer.writerow(row)
+        return output
 
     @staticmethod
     def _positive_or_zero(value: float, name: str) -> float:
