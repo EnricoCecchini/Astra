@@ -6,7 +6,7 @@ from streamlit_geolocation import streamlit_geolocation
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.maps import SiteMarker, sites_map
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
-from weather_app.scoring import load_sample_scores
+from weather_app.client import OpenWeatherClient, WeatherError, forecast_for_time
 from weather_app.sites import load_sites
 from weather_app.utils import compass_point, google_maps_directions_url
 
@@ -30,6 +30,12 @@ def get_planner() -> Planner:
     return Planner(load_sites(), celestial_bodies, ephemeris)
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def site_forecast(latitude: float, longitude: float):
+    """Reuse successful forecasts for 30 minutes across Streamlit reruns."""
+    return OpenWeatherClient().forecast(latitude, longitude)
+
+
 def viewer_timezone() -> ZoneInfo:
     """The browser's time zone, falling back to Madrid if it is unknown."""
     try:
@@ -39,7 +45,6 @@ def viewer_timezone() -> ZoneInfo:
 
 
 planner = get_planner()
-SAMPLE_SCORES = load_sample_scores()
 CELESTIAL_BODY = planner.celestial_bodies
 TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100]
 
@@ -88,7 +93,17 @@ if page == "Live Conditions":
                 st.info(f"There are no observing sites within {query_km} km of your location.")
             else:
                 local_tz = viewer_timezone()
-                scores = SAMPLE_SCORES  # placeholder: same sample row for every site
+                forecasts = {}
+                for outlook in outlooks:
+                    if outlook.window_start_utc is None:
+                        continue
+                    try:
+                        readings = site_forecast(outlook.site.latitude, outlook.site.longitude)
+                        forecasts[outlook.site.site_id] = (
+                            forecast_for_time(readings, outlook.window_start_utc), None
+                        )
+                    except (WeatherError, ValueError) as exc:
+                        forecasts[outlook.site.site_id] = (None, str(exc))
 
                 def local_time(moment):
                     return moment.astimezone(local_tz).strftime("%a %H:%M")
@@ -112,7 +127,7 @@ if page == "Live Conditions":
 
                 def score_text(outlook):
                     # No score for a site where the body never becomes visible.
-                    return f"{scores['combined']:.0f}/100" if outlook.window_start_utc else "—"
+                    return "Unavailable" if outlook.window_start_utc else "—"
 
                 def where_to_look(outlook):
                     if not outlook.window_start_utc:
@@ -158,6 +173,24 @@ if page == "Live Conditions":
                         until_col.metric("Visible until", visible_until(o))
                         sunset = local_time(o.sunset_utc) if o.sunset_utc else "—"
                         st.caption(f"{o.distance_km} km away · Sunset {sunset} · {where_to_look(o)}")
+                        if o.window_start_utc:
+                            reading, error = forecasts[o.site.site_id]
+                            if error:
+                                st.warning(f"Weather unavailable: {error}")
+                            elif reading is None:
+                                st.info("No forecast slot is close enough to this viewing window.")
+                            else:
+                                def value(number, unit):
+                                    return f"{number:g}{unit}" if number is not None else "Unavailable"
+                                st.write(
+                                    f"Forecast at {local_time(reading.timestamp)}: "
+                                    f"{reading.description or 'Conditions unavailable'} · "
+                                    f"Clouds {value(reading.cloud_cover_percent, '%')} · "
+                                    f"Humidity {value(reading.humidity_percent, '%')} · "
+                                    f"Visibility {value(reading.visibility_m, ' m')} · "
+                                    f"Wind {value(reading.wind_speed_mps, ' m/s')} · "
+                                    f"Temperature {value(reading.temperature_c, ' °C')}"
+                                )
                         st.link_button(
                             "Directions in Google Maps",
                             google_maps_directions_url(lat, lon, o.site.latitude, o.site.longitude),
@@ -167,9 +200,9 @@ if page == "Live Conditions":
                 st.caption(
                     f"Times are in {local_tz.key}. Visible means at least "
                     f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
-                    "(weather not included). Scores are sample values from "
-                    "data/scoring_output.csv, the same for every site until per-site scoring "
-                    "is implemented."
+                    "(weather not included). Forecasts use the nearest three-hour slot within "
+                    "90 minutes of the start of the viewing window. A combined score is "
+                    "unavailable until all astronomy scoring inputs are implemented."
                 )
     # TODO: let the user add/select locations and display current conditions.
 

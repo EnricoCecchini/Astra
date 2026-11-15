@@ -138,3 +138,40 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+---
+
+## Feature: OpenWeather client and forecast integration
+
+**Asked:** Build the weather integration and weather handling with the API,
+following the Python II course and the approved implementation plan.
+
+**Got:** Generic JSON client, OpenWeather current and forecast methods, normalized
+weather readings, safe error handling, and forecast display for planner sites.
+Forecasts are matched to viewing-window starts and cached for 30 minutes. The
+combined score is marked unavailable until its astronomy inputs exist.
+
+**Checked:** Offline automated tests cover current and forecast parsing, optional
+fields, HTTP errors, timeout, invalid coordinates, invalid JSON, and forecast
+matching. After key activation, live current-weather and five-day forecast requests
+succeeded for Madrid; the forecast returned 40 slots. A real-browser app check
+remains pending.
+
+**Kept as-is / changed / rejected:** Pending team review.
+
+---
+
+## Feature: Weather-to-scoring contract check
+
+**Asked:** Verify that the weather integration output matches the input expected
+by scoring, using the project's sample scoring output.
+
+**Got:** `tests/test_weather_scoring_contract.py` passes a mocked OpenWeather
+forecast through the client, maps weather fields into `AstroSuitabilityScorer`,
+and compares all score components against `data/scoring_output.csv`.
+
+**Checked:** The test passes offline with fixed weather and astronomy inputs. It
+checks interface compatibility, not a live API response or the app's unfinished
+combined-score integration.
+
+**Kept as-is / changed / rejected:** Pending team review.
