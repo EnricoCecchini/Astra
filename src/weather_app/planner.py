@@ -55,6 +55,7 @@ class Planner:
         self.max_sun_altitude_deg = max_sun_altitude_deg
         self._earth = ephemeris["earth"]
         self._sun = ephemeris["sun"]
+        self._moon = ephemeris["moon"]
         self._timescale = skyfield_load.timescale()
 
     def sites_within(self, origin_lat: float, origin_lon: float, max_distance_km: float):
@@ -79,6 +80,28 @@ class Planner:
         return self._earth + wgs84.latlon(
             site.latitude, site.longitude, elevation_m=site.elevation_m
         )
+
+    def scoring_inputs(self, site: Site, body_name: str, when: datetime) -> dict[str, float]:
+        """Heuristic astronomy suitability at the observation time.
+
+        Darkness rises linearly from 0 at sunset to 100 at -18 degrees.
+        For lunar observing, darkness and moonlight are fully suitable; for
+        other targets, moonlight suitability falls with illuminated fraction
+        when the Moon is above the horizon. These are planning heuristics.
+        """
+        body = self.celestial_bodies[body_name]
+        t = self._timescale.from_datetime(when)
+        observer = self._observer(site).at(t)
+        altitude, _, _ = observer.observe(body["target"]).apparent().altaz()
+        sun_altitude, _, _ = observer.observe(self._sun).apparent().altaz()
+        moon_altitude, _, _ = observer.observe(self._moon).apparent().altaz()
+        illumination = self._earth.at(t).observe(self._moon).apparent().fraction_illuminated(self._sun)
+        is_moon = body["kind"] == "moon"
+        return {
+            "altitude_degrees": float(altitude.degrees),
+            "darkness_suitability": 100.0 if is_moon else max(0.0, min(100.0, -float(sun_altitude.degrees) / 18 * 100)),
+            "moonlight_suitability": 100.0 if is_moon or moon_altitude.degrees <= 0 else (1 - float(illumination)) * 100,
+        }
 
     def site_outlooks(
         self,

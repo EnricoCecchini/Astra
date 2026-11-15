@@ -258,3 +258,15 @@ checks interface compatibility, not a live API response or the app's unfinished
 combined-score integration.
 
 **Kept as-is / changed / rejected:** Pending team review.
+
+---
+
+## Feature: Live site scoring integration
+
+**Asked:** "Run the app and fix the unavailable scoring error"
+
+**Got:** Replaced the unconditional Unavailable score in `app.py` with per-site `AstroSuitabilityScorer` results using normalized weather forecasts and new `Planner.scoring_inputs()`. Astronomy inputs use target altitude, a linear sunset-to-astronomical-darkness heuristic, and the Moon's illuminated fraction when above the horizon; lunar observing is not penalized for daylight or moonlight. Results are saved with site IDs. Missing forecasts, incomplete weather inputs and persistence errors remain explicit. Updated the weather contract test for required site IDs and temporary-file persistence, and added a Streamlit integration test.
+
+**Checked:** Started Streamlit locally on port 8501. AppTest startup produced zero exceptions. All 15 unittest checks passed; the app integration check used real Skyfield calculations and controlled forecasts, displayed numeric scores for three sites, and verified saved site IDs. The live weather check reported that OPENWEATHER_API_KEY must be configured in variables.env, so live forecast-based scores could not be verified in this environment. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification. Scores use documented planning heuristics rather than placeholder sample scores. Live data requires a configured OpenWeather API key.

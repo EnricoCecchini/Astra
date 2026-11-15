@@ -5,6 +5,7 @@ from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.maps import SiteMarker, sites_map
+from weather_app.models import AstroSuitabilityScorer
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.client import OpenWeatherClient, WeatherError, forecast_for_time
 from weather_app.sites import load_sites
@@ -94,6 +95,9 @@ if page == "Live Conditions":
             else:
                 local_tz = viewer_timezone()
                 forecasts = {}
+                scores = {}
+                score_errors = {}
+                scorer = AstroSuitabilityScorer()
                 for outlook in outlooks:
                     if outlook.window_start_utc is None:
                         continue
@@ -104,6 +108,29 @@ if page == "Live Conditions":
                         )
                     except (WeatherError, ValueError) as exc:
                         forecasts[outlook.site.site_id] = (None, str(exc))
+
+                    reading, error = forecasts[outlook.site.site_id]
+                    if error or reading is None:
+                        continue
+                    weather_inputs = {
+                        "cloud_cover_percent": reading.cloud_cover_percent,
+                        "relative_humidity_percent": reading.humidity_percent,
+                        "visibility_m": reading.visibility_m,
+                        "wind_speed_mps": reading.wind_speed_mps,
+                    }
+                    missing = [name for name, value in weather_inputs.items() if value is None]
+                    if missing:
+                        score_errors[outlook.site.site_id] = "Missing forecast data: " + ", ".join(missing)
+                        continue
+                    try:
+                        scores[outlook.site.site_id] = scorer.score(
+                            site_id=outlook.site.site_id,
+                            timestamp=outlook.window_start_utc,
+                            **weather_inputs,
+                            **planner.scoring_inputs(outlook.site, query_body, outlook.window_start_utc),
+                        )
+                    except (ValueError, OSError) as exc:
+                        score_errors[outlook.site.site_id] = str(exc)
 
                 def local_time(moment):
                     return moment.astimezone(local_tz).strftime("%a %H:%M")
@@ -127,6 +154,9 @@ if page == "Live Conditions":
 
                 def score_text(outlook):
                     # No score for a site where the body never becomes visible.
+                    result = scores.get(outlook.site.site_id)
+                    if result is not None:
+                        return f"{result.combined:.0f}/100"
                     return "Unavailable" if outlook.window_start_utc else "—"
 
                 def where_to_look(outlook):
@@ -169,6 +199,8 @@ if page == "Live Conditions":
                         badge_col.badge(status, color=STATUS_BADGE_COLORS[status])
                         score_col, from_col, until_col = st.columns(3)
                         score_col.metric("Score", score_text(o))
+                        if o.site.site_id in score_errors:
+                            st.warning(f"Score unavailable: {score_errors[o.site.site_id]}")
                         from_col.metric("Visible from", visible_from(o))
                         until_col.metric("Visible until", visible_until(o))
                         sunset = local_time(o.sunset_utc) if o.sunset_utc else "—"
@@ -201,8 +233,10 @@ if page == "Live Conditions":
                     f"Times are in {local_tz.key}. Visible means at least "
                     f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
                     "(weather not included). Forecasts use the nearest three-hour slot within "
-                    "90 minutes of the start of the viewing window. A combined score is "
-                    "unavailable until all astronomy scoring inputs are implemented."
+                    "90 minutes of the start of the viewing window. Scores combine forecast "
+                    "weather with target altitude, twilight darkness and lunar illumination "
+                    "at the viewing-window start. Astronomy suitability uses planning heuristics; "
+                    "lunar observing is not penalized for daylight or moonlight."
                 )
     # TODO: let the user add/select locations and display current conditions.
 
