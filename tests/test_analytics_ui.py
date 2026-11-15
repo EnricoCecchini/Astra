@@ -25,7 +25,8 @@ class AnalyticsUiTests(unittest.TestCase):
         forecasts = pd.DataFrame([row(site, timestamp) for site in sites for timestamp in timestamps])
         def load(path, all_sites, kind):
             return (history if kind == "current" else forecasts).copy()
-        with patch("weather_app.analytics_ui.load_weather_history", side_effect=load):
+        with (patch("weather_app.analytics_ui.load_weather_history", side_effect=load),
+              patch("weather_app.collector.start_background", return_value=None)):
             app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60).run()
             app.sidebar.radio[0].set_value("Analytics").run()
             self.assertFalse(app.exception, str(app.exception))

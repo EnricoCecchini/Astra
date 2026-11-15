@@ -65,6 +65,9 @@ class AppScoringTests(unittest.TestCase):
             "weather_app.client.OpenWeatherClient.geocode_city",
             return_value=Place("Granada", 37.18, -3.60, "ES")))
         stack.enter_context(patch("weather_app.client.get_api_key", return_value="test-key"))
+        # The real background collector would call the API and write to data/.
+        self.start_collector = stack.enter_context(patch(
+            "weather_app.collector.start_background", return_value=None))
         stack.enter_context(patch.object(
             AstroSuitabilityScorer, "append_score", autospec=True,
             side_effect=lambda scorer, result: original_append(scorer, result, self.output)))
@@ -145,6 +148,12 @@ class AppScoringTests(unittest.TestCase):
         self.assertTrue(any("Granada, ES" in item.value for item in app.subheader))
         self.geocode.assert_called_once_with("Granada")
         self.http.assert_not_called()
+
+    def test_app_starts_the_background_collector(self):
+        app = AppTest.from_file(APP, default_timeout=60).run()
+        self.assertFalse(app.exception, str(app.exception))
+        self.start_collector.assert_called_once_with()
+        self.assertTrue(any("collection is off" in item.value for item in app.sidebar.caption))
 
     def test_city_errors_are_shown_without_crashing(self):
         self.geocode.side_effect = WeatherError("No city called 'Atlantis' was found. Check the spelling.")

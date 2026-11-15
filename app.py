@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
-from weather_app import history
+from weather_app import collector, history
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.maps import SiteMarker, sites_map
 from weather_app.models import AstroSuitabilityScorer
@@ -108,6 +108,9 @@ def viewer_timezone() -> ZoneInfo:
 
 
 planner = get_planner()
+# Collect weather in the background while the app runs. This starts one daemon
+# thread per server process; later reruns find it already running.
+collector_thread = collector.start_background()
 CELESTIAL_BODY = planner.celestial_bodies
 TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100, None]
 
@@ -145,6 +148,17 @@ with st.sidebar:
         st.caption(f"Using {st.session_state.get('location_label', 'your location')} ✓")
     else:
         st.caption("Click the icon and allow access in your browser, or enter a city.")
+
+    st.divider()
+    saved_current = saved_fetches("current")
+    last_saved = max((fetch.fetched_at for fetch in saved_current.values()), default=None)
+    last_text = (f"last saved {last_saved.astimezone(viewer_timezone()):%a %H:%M}"
+                 if last_saved else "nothing saved yet")
+    if collector_thread is not None and collector_thread.is_alive():
+        minutes = collector.DEFAULT_INTERVAL_S // 60
+        st.caption(f"🔄 Weather is collected automatically every {minutes} min · {last_text}.")
+    else:
+        st.caption(f"⏸️ Automatic weather collection is off · {last_text}.")
 
 if page == "Live Conditions":
     st.header("Live Conditions")
