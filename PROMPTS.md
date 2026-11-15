@@ -270,3 +270,15 @@ combined-score integration.
 **Checked:** Started Streamlit locally on port 8501. AppTest startup produced zero exceptions. All 15 unittest checks passed; the app integration check used real Skyfield calculations and controlled forecasts, displayed numeric scores for three sites, and verified saved site IDs. The live weather check reported that OPENWEATHER_API_KEY must be configured in variables.env, so live forecast-based scores could not be verified in this environment. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification. Scores use documented planning heuristics rather than placeholder sample scores. Live data requires a configured OpenWeather API key.
+
+---
+
+## Feature: Virgo forecast resilience
+
+**Asked:** "fix the unavailable score error that appears when lookig for virgo in a 100 kilometer radius"
+
+**Got:** Updated `OpenWeatherClient.forecast()` to retain valid forecast slots when another slot contains invalid data. It still raises a weather error when every slot is invalid and preserves the 90-minute forecast matching limit. Added regression tests for mixed valid/invalid slots and entirely invalid forecasts.
+
+**Checked:** Reproduced the live Virgo search from Madrid within 100 km: Navacerrada's later forecast contained humidity 101%, causing the whole forecast to fail. After the fix the same live search showed three scores (31/100, 31/100, 45/100), zero app exceptions and zero warnings. All 17 unittest checks and `git diff --check` passed. Diagnostic scores were saved only to temporary files.
+
+**Kept as-is / changed / rejected:** Kept after verification. Invalid data is skipped rather than altered; valid viewing-time forecasts remain usable.

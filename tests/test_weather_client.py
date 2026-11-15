@@ -36,6 +36,24 @@ class WeatherClientTests(unittest.TestCase):
         self.assertEqual(result[1].kind, "forecast")
 
     @patch("weather_app.client.requests.get")
+    def test_invalid_later_slot_does_not_discard_viewing_forecast(self, get):
+        invalid = {**self.raw, "dt": self.raw["dt"] + 3 * 3600,
+                   "main": {"temp": 4.25, "humidity": 101}}
+        get.return_value = self.response({"list": [invalid, self.raw, None]})
+        readings = self.client.forecast(40, -3)
+        self.assertEqual(len(readings), 1)
+        self.assertEqual(readings[0].humidity_percent, 60)
+        self.assertIs(forecast_for_time(readings, readings[0].timestamp), readings[0])
+        self.assertIsNone(forecast_for_time(
+            readings, readings[0].timestamp + timedelta(hours=3)))
+
+    @patch("weather_app.client.requests.get")
+    def test_all_invalid_forecast_slots_report_an_error(self, get):
+        get.return_value = self.response({"list": [None, {**self.raw, "main": {"humidity": 101}}]})
+        with self.assertRaisesRegex(WeatherError, "no valid forecast slots"):
+            self.client.forecast(40, -3)
+
+    @patch("weather_app.client.requests.get")
     def test_http_error_and_timeout_do_not_expose_key(self, get):
         for code in (401, 429, 500):
             get.return_value = self.response({}, code)

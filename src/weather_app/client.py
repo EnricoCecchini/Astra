@@ -84,7 +84,16 @@ class OpenWeatherClient(BaseAPIClient):
         entries = payload.get("list")
         if not isinstance(entries, list) or not entries:
             raise WeatherError("Weather forecast contains no forecast slots.")
-        return [self._parse(entry, latitude, longitude, "forecast") for entry in entries]
+        # One malformed future slot must not discard otherwise usable forecasts.
+        readings = []
+        for entry in entries:
+            try:
+                readings.append(self._parse(entry, latitude, longitude, "forecast"))
+            except WeatherError:
+                continue
+        if not readings:
+            raise WeatherError("Weather forecast contains no valid forecast slots.")
+        return readings
 
     @staticmethod
     def _parse(data: dict, latitude: float, longitude: float, kind: str) -> WeatherReading:
