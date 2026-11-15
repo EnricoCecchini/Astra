@@ -3,18 +3,6 @@
 Add one entry per feature/class you asked an AI agent to help with, in the order you worked on them.
 Keep this running as you go — don't reconstruct it from memory at the end.
 
-## Feature: <short name>
-
-**Asked:** <the actual prompt you gave the agent>
-
-**Got:** <what file/function it produced>
-
-**Checked:** <how you verified it — a hand-made test case, a comparison against a known value, etc.>
-
-**Kept as-is / changed / rejected:** <which, and why>
-
----
-
 ## Feature: Sample observing-sites dataset
 
 **Asked:** "create the data/ dir and create a sample dataset with 10 entries for the Site object using places in Spain"
@@ -23,7 +11,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Loaded the file with `pandas.read_csv` (10 rows, 7 columns, accents read correctly as UTF-8). Coordinates and elevations are approximate values from the agent's knowledge — _TODO (student): spot-check them on a map._
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept as-is. `data/sites.csv` has not changed since it was added (`29971ec`). All ten sites are used by the planner, the weather collector and the analytics.
 
 ---
 
@@ -35,7 +23,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Same point → 0 km; 1° of longitude on the equator = 2πR/360 (≈111.195 km); pole to pole and two antipodal equator points = πR; swapping the points gives the same result; Madrid (Sol) → Barcelona (Pl. Catalunya) = 505.2 km, matching the commonly quoted ~505 km straight-line distance; latitude 91 raises `ValueError`.
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept as-is. `haversine_km` has not changed since `4d965d4`. It is used by `Site.distance_km()`, the planner's range filter and the map's site placement; the same module later gained `compass_point()` (`64f5eea`) and `google_maps_directions_url()` (`0dd0ee6`).
 
 ---
 
@@ -47,7 +35,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Ran the app headless with Streamlit's `AppTest`: no exceptions, the dropdown has 96 options (7 planets + Moon + 88 constellations, the official IAU count), Jupiter–Neptune resolve to barycenters, and Orion maps to `Ori`.
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept, then extended. The loader is unchanged, and `f4619d3` gave each constellation an observable centre position so the planner can compute its altitude (see the Planner entry). The dropdown now sits in one row with the distance selector and the Get Sites button (`29557bb`).
 
 ---
 
@@ -59,7 +47,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Ran the app headless with Streamlit's `AppTest`: both dropdowns and the Confirm button render without errors; clicking Confirm sets the flag and shows the instruction and "waiting" caption. The browser permission prompt itself can't be exercised headless — _TODO (student): test in a real browser on localhost (allow and deny)._
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Changed. `29557bb` replaced the Confirm button with a "Get Sites" button and moved location sharing to the sidebar, so the location can be shared from page load instead of after a click. `f343acd` added a city text box as the fallback when the browser can't or won't share a location; it now uses OpenWeather geocoding (`d128dc8`).
 
 ---
 
@@ -76,7 +64,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Constellation centres compared with approximate reference positions (Orion 5.6h/+5°, Crux 12.4h/−60°, Cassiopeia 1.0h/+63°). From Puerta del Sol: 50 km → Madrid centre and Navacerrada (48.2 km); 100 km adds Yebes (53.4 km). On 2026-11-14 at 23:00 local, Orion is rising in the east (az ≈ 104°, alt ≈ 23°) and Saturn is high in the south (alt ≈ 49°); Crux never qualifies at Madrid's latitude; at 13:00 local nothing that needs darkness qualifies. Ran the app headless with `AppTest` and a simulated location: no errors, correct "not visible right now" message at midday.
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept and extended. `Planner` is still the core of Live Conditions. Later commits added sunset times (`66e9fc2`), viewing windows (`040d830`), the astronomy inputs for scoring (`52b7425`), the night sky track for the forecast chart (`ea5fe68`) and searches without a distance limit (`f32dd8d`).
 
 ---
 
@@ -91,7 +79,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Madrid sunset on 2026-11-14 = 16:58 UTC (17:58 CET), matching published tables; at 01:00 UTC it returns the previous evening's sunset (16:59 on the 13th) and at 10:00/17:00/23:00 UTC the 14th's. Yebes (further east) sets earlier at 17:55, Teide at 18:13 UTC. Ran the app headless with the clock patched to 22:00 UTC: Saturn within 100 km shows Madrid, Navacerrada and Yebes with sunset times and the sample scores (84.0 / 94.5 / 88.2).
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Changed. The table was replaced by the map and site cards (`0a88690`, see below), and the placeholder scores were replaced by real per-site scores (`52b7425`). `scoring.py` and its `load_sample_scores()` loader were removed in `90448fb` because nothing used them any more. The sunset time was kept and is shown on each site card.
 
 ---
 
@@ -105,7 +93,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** From Puerta del Sol, 100 km, on 2026-11-14 at 13:00 local: Saturn becomes visible at 18:30 local (≈30 min after the 17:58 sunset, when the Sun reaches −6°) until 03:25, rising in the ESE at ≈25°; Orion from ≈21:55; the Moon (no darkness rule) 13:55–20:40; Crux has no window. At 23:00 local Saturn shows "Now" for all three sites and `visible_sites()` still returns 3. Each search takes ≈0.1 s. Ran the app headless with the clock patched to midday: the table shows all three sites with their windows, and a 5 km search from an empty area shows the "no sites within range" message.
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept. `site_outlooks()` still produces every site card and its "Visible from / until" values; later changes only added scores and the no-distance option (`f32dd8d`) on top of it.
 
 ---
 
@@ -120,7 +108,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** Every point of the 50 km circle is 50.0 km from the centre by `haversine_km`; zoom is 12.1 for 5 km and 7.8 for 100 km around Madrid; `compass_point` gives N/N/NNE/E/ESE/SSW/N for 0/11/12/90/112/197.7/359°. Ran the app headless with the clock at 13:00 local: Saturn within 100 km renders one map and cards with "88/100", "Sat 18:25" → "Sun 03:25"; Crux shows "—" and "Not in next 48 h". The map's look in a real browser still needs checking — _TODO (student)._
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept and extended. Cards were later ordered by descending score (`3b9af84`) and given a rating label such as "Good" (`f343acd`), and with "No preference" the map leaves out the radius circle and fits all sites (`f32dd8d`).
 
 ---
 
@@ -135,7 +123,7 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 
 **Checked:** The figure's traces are "Travel radius (50 km)", the status traces in legend group "sites" titled "Suggested sites", and "Your current location". The generated URL for Madrid → Navacerrada has the right origin/destination. Headless app run: Saturn within 100 km renders 3 link buttons, the first pointing from 40.4169,-3.7035 to Yebes (40.5247,-3.0886). Opening the link in a browser — _TODO (student)._
 
-**Kept as-is / changed / rejected:** _TODO (student): fill in._
+**Kept as-is / changed / rejected:** Kept. The legend labels and the "Directions in Google Maps" button are still on every site card; only the travel-radius legend entry was made optional for "No preference" searches (`f32dd8d`).
 
 ---
 
@@ -275,7 +263,7 @@ matching. After key activation, live current-weather and five-day forecast reque
 succeeded for Madrid; the forecast returned 40 slots. A real-browser app check
 remains pending.
 
-**Kept as-is / changed / rejected:** Pending team review.
+**Kept as-is / changed / rejected:** Kept and merged into `dev` through PR #3 (`7bfde15`), then changed: invalid forecast slots are skipped instead of failing the whole forecast (`c65216b`), readings are appended to the CSV histories (`f0d538f`), errors became provider-neutral and the key name-mangled (`b6713e9`). The 30-minute app cache was dropped when the app stopped fetching weather and began reading the collector's saved data (`d128dc8`).
 
 ---
 
@@ -292,7 +280,7 @@ and compares all score components against `data/scoring_output.csv`.
 checks interface compatibility, not a live API response or the app's unfinished
 combined-score integration.
 
-**Kept as-is / changed / rejected:** Pending team review.
+**Kept as-is / changed / rejected:** Changed twice. `902fa40` added the required site ID and wrote scores to a temporary file instead of the project CSV. `9b8bd28` moved the reference entry into the test file (`SAMPLE`), because the hand-made row in `data/scoring_output.csv` was removed (`e640bb6`) to keep only real data in the log.
 
 ---
 
@@ -451,7 +439,7 @@ combined-score integration.
 
 **Checked:** `uv run python -m unittest discover -s tests` passes 36 tests. New tests cover: a distinct message per failure mode; city lookup, unknown city and invalid input with no request sent; the key not being reachable as `_api_key` and absent from `repr`; rating bands and ordering; `computed_at` logging; current conditions and the city fallback in the app; and no duplicate score rows across reruns. All tests use mocks and temporary files. Not checked in a real browser.
 
-**Kept as-is / changed / rejected:** _Pending team review of `feature/fixes`._
+**Kept as-is / changed / rejected:** Kept. All the fix commits (`b6713e9` … `5b04d4a`) were merged into `main` and pushed to GitHub. One part was later replaced: `current_weather_for_city()` logged a reading on every city lookup, so `geocode_city()` replaced it (next entry).
 
 ---
 
@@ -467,7 +455,7 @@ combined-score integration.
 
 **Checked:** All 42 unittest checks pass. The app tests make any weather HTTP request raise, and assert that it never happens across searches, reruns, current conditions and city lookup. They also cover a site with no saved forecast and an empty history. On the real CSVs, `latest_fetches` finds the latest collector batch for all 10 sites in about 0.06 s.
 
-**Kept as-is / changed / rejected:** _Pending team review._ The clock offset seen in app-logged rows was left alone, as instructed (an OS issue).
+**Kept as-is / changed / rejected:** Kept, and merged into `main` and pushed. The clock offset seen in app-logged rows was left alone, as instructed (an OS issue).
 
 ---
 
@@ -483,4 +471,4 @@ combined-score integration.
 
 **Checked:** All 49 unittest checks pass, and checksums confirm the files in `data/` are unchanged by the test run. New tests cover recent-data skipping, collecting into the given folder, surviving a missing key and unexpected errors, the thread starting once (daemon, by name), and the disable switch. A live start of the thread skipped its first round because a running collector had saved data 40 seconds earlier.
 
-**Kept as-is / changed / rejected:** _Pending team review._
+**Kept as-is / changed / rejected:** Kept, and merged into `main` and pushed. The app is now left running on a Linux home server so the collector builds history continuously until the presentation. The team removed the unused placeholder test in `87844a9` and has committed the collected data regularly since (`e640bb6`, `3f2ced4`, `1ad2b26`, `e1abe2a`).
