@@ -1,0 +1,4 @@
+fetched_at,latitude,longitude,timestamp,kind,temperature_c,cloud_cover_percent,humidity_percent,visibility_m,wind_speed_mps,description
+2026-11-15T12:56:06.604085+00:00,40.4169,-3.7035,2026-11-15T12:48:59+00:00,current,12.5,75.0,87.0,5000.0,8.23,light intensity drizzle
+2026-11-15T12:56:06.833341+00:00,40.7856,-4.0042,2026-11-15T12:56:06+00:00,current,6.5,100.0,59.0,6139.0,3.26,light rain
+2026-11-15T12:56:07.076115+00:00,40.5247,-3.0886,2026-11-15T12:56:06+00:00,current,10.95,100.0,91.0,10000.0,7.2,overcast clouds
