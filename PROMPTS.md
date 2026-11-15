@@ -138,3 +138,87 @@ Keep this running as you go — don't reconstruct it from memory at the end.
 **Kept as-is / changed / rejected:** _TODO (student): fill in._
 
 ---
+
+## Feature: Scoring branch setup
+
+**Asked:** "create a new branch called feature/scoring"
+
+**Got:** Created and switched to the Git branch `feature/scoring` from the current branch.
+
+**Checked:** Git confirmed the branch was created and selected.
+
+**Kept as-is / changed / rejected:** Kept as-is. The branch name matched the request.
+
+---
+
+## Feature: Scoring pull request
+
+**Asked:** "submit a pull request to move recent branch changes to dev". Follow-ups: "let's try that pr request again, I should have write access now" and "let's try again".
+
+**Got:** Committed the existing changes in `src/weather_app/models.py` as `cf001da` (`feat(scoring): add stargazing suitability scorer`), pushed `feature/scoring`, and created PR #1 targeting `dev`: https://github.com/EnricoCecchini/Astra/pull/1. The file contains `AstroSuitabilityScorer` and the immutable `ScoreResult` data class. The implementation was already present as an uncommitted change when the PR work resumed; its original authoring prompt is not available in this conversation.
+
+**Checked:** Compared the branch against the fetched `origin/dev`, reviewed the diff, and ran `git diff --check` successfully. Automated tests were not run during PR preparation because Python was unavailable on PATH. Git confirmed the eventual push, and the GitHub API returned the PR URL. Earlier attempts either had no changes to submit or failed with a permissions error.
+
+**Kept as-is / changed / rejected:** Kept the existing scoring implementation as-is and submitted it for review. Retried the push after repository access was updated; the PR was created successfully. No merge was performed.
+
+---
+
+## Feature: Sample scoring CSV
+
+**Asked:** "generate a sample output of the scoring system and append it to a csv"
+
+**Got:** Created `sample_scoring_output.csv` with a header and one illustrative row generated directly by `AstroSuitabilityScorer.score()`, using the bundled Python runtime. Inputs: timestamp `2026-11-14T22:00:00+01:00`, cloud cover 10%, relative humidity 40%, visibility 10,000 m, wind speed 2 m/s, target altitude 60 degrees, darkness suitability 95, and moonlight suitability 80. The CSV includes all component scores plus weather, astronomical, and combined totals.
+
+**Checked:** Read the CSV back and verified that exactly one row was added, prior rows were preserved, and the saved combined score matched the scorer result. Inspected the output: weather `84.0`, astronomical `94.5`, combined `88.2`. These are illustrative inputs, not observed weather data.
+
+**Kept as-is / changed / rejected:** Kept the generated CSV as-is. Removed the temporary generation script after verification. The CSV was left uncommitted.
+
+---
+
+## Feature: Historical analysis branch setup
+
+**Asked:** "create a new branch feature/historical-analysis"
+
+**Got:** Created and switched to `feature/historical-analysis` from the current `feature/scoring` branch. No historical analysis implementation was requested or produced in this step.
+
+**Checked:** Git confirmed the branch was created and selected.
+
+**Kept as-is / changed / rejected:** Kept as-is. The branch name matched the request.
+
+---
+
+## Feature: Append scoring results to CSV
+
+**Asked:** "add a function to the astrosuitabilityscorer to append the score to the scoring output csv"
+
+**Got:** `AstroSuitabilityScorer.append_score(result, path=None)` in `src/weather_app/models.py`. Appends a `ScoreResult` to `data/scoring_output.csv` by default, supports a custom path, creates missing directories and headers, and serializes the timestamp as ISO 8601. Rejects incompatible CSV headers before writing and handles existing files without a final newline. Added `tests/test_scoring_csv.py`.
+
+**Checked:** All three unittest checks passed using the bundled Python runtime: repeated appends preserve prior rows and one header, empty files and missing final newlines work, and incompatible headers leave the existing file unchanged. The sample combined score was verified as 88.2. `git diff --check` passed. Tests used temporary files and did not modify the project scoring CSV.
+
+**Kept as-is / changed / rejected:** Kept the implementation after verification. Saving is an explicit call after scoring.
+
+---
+
+## Feature: Automatically save every new score
+
+**Asked:** "call the append score every time a new score is registered"
+
+**Got:** `AstroSuitabilityScorer.score()` now calls `append_score(result)` before returning each new result. The constructor accepts an optional `output_path`; the default remains `data/scoring_output.csv`. Callers should no longer append the same result manually after calling `score()`, since that would duplicate the row. Write errors propagate to the caller.
+
+**Checked:** All six CSV persistence unittest checks passed, including two scoring calls producing two rows, invalid inputs producing no file, and write failures propagating. Tests used temporary files. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Changed saving from an explicit follow-up call to automatic persistence. Committed the append helper and automatic-saving behavior separately, excluding unrelated staged files.
+
+---
+
+## Feature: Site identifiers in scoring history
+
+**Asked:** "include the site id attribute to the astrosuitabilityscore"
+
+**Got:** Added required `site_id` to `AstroSuitabilityScorer.score()` and `ScoreResult`, with validation for a nonempty string. Automatically saved CSV rows include the identifier. Added the column to `data/scoring_output.csv`, leaving the historical sample ID blank because no site was originally recorded. Updated `load_sample_scores()` to exclude site metadata from numeric score conversion.
+
+**Checked:** All eight scoring CSV unittest checks passed, including distinct site IDs in results and saved rows, rejection of invalid identifiers, and sample-loader compatibility. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification. Site identity is supplied for each scoring call so one scorer can process multiple sites.
+
+---
