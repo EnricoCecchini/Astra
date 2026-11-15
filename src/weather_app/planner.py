@@ -103,6 +103,14 @@ class Planner:
             "moonlight_suitability": 100.0 if is_moon or moon_altitude.degrees <= 0 else (1 - float(illumination)) * 100,
         }
 
+    def sky_track(self, site: Site, body_name: str, moments):
+        """Vectorized target and solar altitudes for analytics and planning."""
+        times = self._timescale.from_datetimes(list(moments))
+        observer = self._observer(site).at(times)
+        altitude, _, _ = observer.observe(self.celestial_bodies[body_name]["target"]).apparent().altaz()
+        sun, _, _ = observer.observe(self._sun).apparent().altaz()
+        return altitude.degrees, sun.degrees
+
     def site_outlooks(
         self,
         body_name: str,
