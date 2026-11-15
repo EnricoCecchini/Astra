@@ -12,3 +12,6 @@ AstroWeather*
 # Skyfield ephemeris cache (downloaded on first run)
 data/skyfield/
 *.bsp
+
+INSTRUCTIONS_README*
+ANALYSIS_REPORT*
