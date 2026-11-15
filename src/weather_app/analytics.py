@@ -7,6 +7,7 @@ from plotly.subplots import make_subplots
 from .models import AstroSuitabilityScorer
 
 NIGHT_HOURS = list(range(18, 24)) + list(range(8))
+SCORE_LABEL = "Weather score S_W (0–100, higher is better)"
 PARTS = {"Cloud (0.50C)": "cloud_part", "Humidity (0.20H)": "humidity_part",
          "Visibility (0.15V)": "visibility_part", "Wind (0.15W)": "wind_part"}
 
@@ -71,8 +72,8 @@ def history_chart(frame, timezone):
                 fig.add_vrect(x0=block.local_time.iloc[0],
                     x1=block.local_time.iloc[-1] + pd.Timedelta(minutes=5),
                     fillcolor="midnightblue", opacity=0.04, line_width=0)
-    fig.update_layout(yaxis_title="Weather score S_W", xaxis_title=f"Time ({timezone})",
-                      yaxis_range=[0, 100], legend_title="Site")
+    fig.update_layout(title="Hourly mean weather score by site", yaxis_title=SCORE_LABEL,
+                      xaxis_title=f"Time ({timezone})", yaxis_range=[0, 100], legend_title="Site")
     return fig
 
 
@@ -81,8 +82,9 @@ def ranking_chart(frame):
     fig = go.Figure(go.Bar(x=ranked["mean"], y=ranked.site, orientation="h",
         text=[f"{pct:.0f}% >75 · n={n}" for pct, n in zip(ranked.above_75, ranked.n)],
         textposition="auto"))
-    fig.update_layout(xaxis_title="Mean nighttime S_W", xaxis_range=[0, 100],
-                      yaxis_autorange="reversed")
+    fig.update_layout(title="Sites ranked by mean nighttime weather score",
+                      xaxis_title="Mean nighttime S_W (0–100)", yaxis_title="Site",
+                      xaxis_range=[0, 100], yaxis_autorange="reversed")
     return fig
 
 
@@ -93,8 +95,11 @@ def heatmap_chart(frame, timezone):
         index="site", columns="hour", values="weather", aggfunc="mean")
     table = table.reindex(index=sorted(frame.site.unique()), columns=NIGHT_HOURS)
     fig = go.Figure(go.Heatmap(z=table.values, x=[f"{h:02d}:00" for h in NIGHT_HOURS],
-        y=table.index, zmin=0, zmax=100, colorscale="Viridis", colorbar_title="S_W", hoverongaps=False))
-    fig.update_layout(xaxis_title=f"Hour ({timezone}); blank cells have no observations")
+        y=table.index, zmin=0, zmax=100, colorscale="Viridis", colorbar_title="S_W (0–100)",
+        hoverongaps=False))
+    fig.update_layout(title="Mean weather score by night hour",
+                      xaxis_title=f"Hour ({timezone}); blank cells have no observations",
+                      yaxis_title="Site")
     return fig
 
 
@@ -103,8 +108,10 @@ def components_chart(frame):
     fig = go.Figure()
     for label, column in PARTS.items():
         fig.add_bar(x=latest[column], y=latest.site, name=label, orientation="h")
-    fig.update_layout(barmode="stack", xaxis_title="Weighted contribution to S_W",
-                      xaxis_range=[0, 100], yaxis_autorange="reversed")
+    fig.update_layout(title="What makes up each site's latest weather score",
+                      barmode="stack", xaxis_title="Weighted contribution to S_W (score points, 0–100)",
+                      yaxis_title="Site", xaxis_range=[0, 100], yaxis_autorange="reversed",
+                      legend_title="Component")
     return fig
 
 
@@ -121,6 +128,6 @@ def forecast_chart(track, site_name, timezone, min_altitude):
                 x1=group.local_time.iloc[-1] + pd.Timedelta(minutes=5),
                 fillcolor="green", opacity=0.15, line_width=0)
     fig.update_yaxes(title_text="Altitude (degrees)", secondary_y=False)
-    fig.update_yaxes(title_text="Forecast S_W", range=[0, 100], secondary_y=True)
+    fig.update_yaxes(title_text="Forecast S_W (0–100)", range=[0, 100], secondary_y=True)
     fig.update_layout(title=f"Forecast · {site_name}", xaxis_title=f"Time ({timezone})")
     return fig
