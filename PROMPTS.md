@@ -318,3 +318,15 @@ combined-score integration.
 **Checked:** Confirmed the running process and first live cycle: 20/20 successful requests, 10 current readings and 397 valid forecast slots appended. Log confirms the next cycle is scheduled at the five-minute interval. All 19 unittest checks passed, including continued collection after an endpoint failure.
 
 **Kept as-is / changed / rejected:** Kept and started after verification. Collection runs while the process and computer remain running; it is not configured to restart after reboot.
+
+---
+
+## Feature: Explain the forecast matching limit
+
+**Asked:** "Specify in the error message that viewing windows are 90 minutes, so that the user knows that in the next 90 minutes there won't be an available score"
+
+**Got:** Updated the missing-forecast message in `app.py` to state that no valid forecast is within 90 minutes before or after the viewing-window start. Clarified that this is the forecast matching limit rather than the duration of a viewing window or a prediction about when a score will become available.
+
+**Checked:** Compared the message with the 90-minute limit in `forecast_for_time()` and ran `git diff --check`.
+
+**Kept as-is / changed / rejected:** Changed the wording to explain the implemented time limit accurately.

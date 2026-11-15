@@ -217,7 +217,11 @@ if page == "Live Conditions":
                             if error:
                                 st.warning(f"Weather unavailable: {error}")
                             elif reading is None:
-                                st.info("No forecast slot is close enough to this viewing window.")
+                                st.info(
+                                    "Score unavailable for this viewing window: no valid weather "
+                                    "forecast is within 90 minutes before or after its start time. "
+                                    "A score requires a forecast within that range."
+                                )
                             else:
                                 def value(number, unit):
                                     return f"{number:g}{unit}" if number is not None else "Unavailable"
