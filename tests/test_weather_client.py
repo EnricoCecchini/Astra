@@ -100,6 +100,56 @@ class WeatherClientTests(unittest.TestCase):
         with self.assertRaises(WeatherError):
             self.client.current_weather(40, -3)
 
+    @patch("weather_app.client.requests.get")
+    def test_each_failure_mode_has_a_distinct_message(self, get):
+        messages = set()
+        for code in (401, 404, 429, 503):
+            get.return_value = self.response({}, code)
+            with self.assertRaises(WeatherError) as caught:
+                self.client.current_weather(40, -3)
+            messages.add(str(caught.exception))
+        get.side_effect = requests.ConnectionError()
+        with self.assertRaises(WeatherError) as caught:
+            self.client.current_weather(40, -3)
+        messages.add(str(caught.exception))
+        self.assertEqual(len(messages), 5)
+
+    @patch("weather_app.client.requests.get")
+    def test_city_lookup_logs_reading_with_city_coordinates(self, get):
+        get.return_value = self.response({**self.raw, "coord": {"lat": 41.39, "lon": 2.17}})
+        reading = self.client.current_weather_for_city("  Barcelona ")
+        self.assertEqual((reading.latitude, reading.longitude), (41.39, 2.17))
+        self.assertEqual(get.call_args.kwargs["params"]["q"], "Barcelona")
+        with (self.data_dir / "historical_weather.csv").open(newline="", encoding="utf-8") as file:
+            self.assertEqual(len(list(csv.DictReader(file))), 1)
+
+    @patch("weather_app.client.requests.get")
+    def test_unknown_city_reports_not_found(self, get):
+        get.return_value = self.response({"cod": "404"}, 404)
+        with self.assertRaisesRegex(WeatherError, "No city called 'Atlantis'"):
+            self.client.current_weather_for_city("Atlantis")
+
+    @patch("weather_app.client.requests.get")
+    def test_invalid_city_is_rejected_before_request(self, get):
+        for city in ("", "   ", "12345", "Madrid; DROP", "x" * 101, None):
+            with self.subTest(city=city), self.assertRaises(ValueError):
+                self.client.current_weather_for_city(city)
+        get.assert_not_called()
+        self.assertEqual(OpenWeatherClient.validate_city("san  sebastián"), "san sebastián")
+
+    def test_api_key_is_private_and_not_in_repr(self):
+        self.assertFalse(hasattr(self.client, "_api_key"))
+        self.assertFalse(hasattr(self.client, "__api_key"))
+        self.assertNotIn("test-key", repr(self.client))
+
+    def test_reading_reports_missing_scoring_fields(self):
+        complete = self.client._parse(self.raw, 40, -3, "forecast")
+        self.assertEqual(complete.missing_scoring_fields, [])
+        self.assertEqual(complete.scoring_inputs["relative_humidity_percent"], 60)
+        partial = self.client._parse({"dt": 1700000000, "clouds": {"all": 5}}, 40, -3, "forecast")
+        self.assertEqual(partial.missing_scoring_fields,
+                         ["relative_humidity_percent", "visibility_m", "wind_speed_mps"])
+
     def test_matching_forecast_respects_time_limit(self):
         reading = self.client._parse(self.raw, 40, -3, "forecast")
         self.assertIs(forecast_for_time([reading], reading.timestamp + timedelta(minutes=90)), reading)
