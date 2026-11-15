@@ -1,5 +1,4 @@
-"""Check that normalized weather feeds the scorer and reproduces its sample."""
-import csv
+"""Check that normalized weather feeds the scorer and reproduces a fixed sample."""
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -9,13 +8,21 @@ from tempfile import TemporaryDirectory
 from weather_app.client import OpenWeatherClient
 from weather_app.models import AstroSuitabilityScorer
 
+# Fixed reference entry: the scorer's output for the inputs below (cloud 10 %,
+# humidity 40 %, visibility 10 km, wind 2 m/s, altitude 60 deg, darkness 95,
+# moonlight 80). Kept here so the check never depends on the live scoring log.
+SAMPLE = {
+    "timestamp": "2026-11-14T22:00:00+01:00",
+    "cloud": 90.0, "humidity": 60.0, "visibility": 100.0, "wind": 80.0,
+    "altitude": 100.0, "darkness": 95.0, "moonlight": 80.0,
+    "weather": 84.0, "astronomical": 94.5, "combined": 88.2,
+}
+
 
 class WeatherScoringContractTests(unittest.TestCase):
     @patch("weather_app.client.requests.get")
-    def test_api_response_through_scorer_matches_sample_csv(self, get):
-        sample_path = Path(__file__).resolve().parents[1] / "data" / "scoring_output.csv"
-        with sample_path.open(newline="", encoding="utf-8") as file:
-            sample = next(csv.DictReader(file))
+    def test_api_response_through_scorer_matches_fixed_sample(self, get):
+        sample = SAMPLE
         timestamp = datetime.fromisoformat(sample["timestamp"])
         response = Mock(status_code=200, ok=True)
         response.json.return_value = {
@@ -46,7 +53,7 @@ class WeatherScoringContractTests(unittest.TestCase):
         self.assertEqual(score.timestamp, timestamp)
         for field in ("cloud", "humidity", "visibility", "wind", "altitude", "darkness", "moonlight", "weather", "astronomical", "combined"):
             with self.subTest(field=field):
-                self.assertAlmostEqual(getattr(score, field), float(sample[field]), places=6)
+                self.assertAlmostEqual(getattr(score, field), sample[field], places=6)
 
 
 if __name__ == "__main__":
