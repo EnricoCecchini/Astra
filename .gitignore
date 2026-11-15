@@ -15,3 +15,5 @@ data/skyfield/
 
 INSTRUCTIONS_README*
 ANALYSIS_REPORT*
+# Local background weather collector logs and process ID
+.weather-collector/

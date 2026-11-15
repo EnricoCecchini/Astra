@@ -5,6 +5,7 @@ from streamlit_geolocation import streamlit_geolocation
 
 from weather_app.astronomy import load_celestial_bodies, load_ephemeris
 from weather_app.maps import SiteMarker, sites_map
+from weather_app.models import AstroSuitabilityScorer
 from weather_app.planner import LOOKAHEAD_HOURS, Planner
 from weather_app.client import OpenWeatherClient, WeatherError, forecast_for_time
 from weather_app.sites import load_sites
@@ -46,7 +47,7 @@ def viewer_timezone() -> ZoneInfo:
 
 planner = get_planner()
 CELESTIAL_BODY = planner.celestial_bodies
-TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100]
+TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100, None]
 
 st.title("Weather Insights")
 
@@ -74,7 +75,7 @@ if page == "Live Conditions":
         max_travel_km = st.selectbox(
             "Maximum travel distance",
             TRAVEL_DISTANCE_OPTIONS_KM,
-            format_func=lambda km: f"{km} km",
+            format_func=lambda km: "No preference" if km is None else f"{km} km",
         )
     with button_col:
         if st.button("Get Sites", type="primary", width="stretch"):
@@ -90,10 +91,14 @@ if page == "Live Conditions":
             lat, lon = st.session_state["user_location"]
             outlooks = planner.site_outlooks(query_body, lat, lon, query_km)
             if not outlooks:
-                st.info(f"There are no observing sites within {query_km} km of your location.")
+                st.info("There are no configured observing sites." if query_km is None
+                        else f"There are no observing sites within {query_km} km of your location.")
             else:
                 local_tz = viewer_timezone()
                 forecasts = {}
+                scores = {}
+                score_errors = {}
+                scorer = AstroSuitabilityScorer()
                 for outlook in outlooks:
                     if outlook.window_start_utc is None:
                         continue
@@ -104,6 +109,29 @@ if page == "Live Conditions":
                         )
                     except (WeatherError, ValueError) as exc:
                         forecasts[outlook.site.site_id] = (None, str(exc))
+
+                    reading, error = forecasts[outlook.site.site_id]
+                    if error or reading is None:
+                        continue
+                    weather_inputs = {
+                        "cloud_cover_percent": reading.cloud_cover_percent,
+                        "relative_humidity_percent": reading.humidity_percent,
+                        "visibility_m": reading.visibility_m,
+                        "wind_speed_mps": reading.wind_speed_mps,
+                    }
+                    missing = [name for name, value in weather_inputs.items() if value is None]
+                    if missing:
+                        score_errors[outlook.site.site_id] = "Missing forecast data: " + ", ".join(missing)
+                        continue
+                    try:
+                        scores[outlook.site.site_id] = scorer.score(
+                            site_id=outlook.site.site_id,
+                            timestamp=outlook.window_start_utc,
+                            **weather_inputs,
+                            **planner.scoring_inputs(outlook.site, query_body, outlook.window_start_utc),
+                        )
+                    except (ValueError, OSError) as exc:
+                        score_errors[outlook.site.site_id] = str(exc)
 
                 def local_time(moment):
                     return moment.astimezone(local_tz).strftime("%a %H:%M")
@@ -127,6 +155,9 @@ if page == "Live Conditions":
 
                 def score_text(outlook):
                     # No score for a site where the body never becomes visible.
+                    result = scores.get(outlook.site.site_id)
+                    if result is not None:
+                        return f"{result.combined:.0f}/100"
                     return "Unavailable" if outlook.window_start_utc else "—"
 
                 def where_to_look(outlook):
@@ -137,7 +168,8 @@ if page == "Live Conditions":
                         f"{outlook.altitude_deg:.0f}° above the horizon"
                     )
 
-                st.subheader(f"{query_body} from sites within {query_km} km")
+                st.subheader(f"{query_body} from all observing sites" if query_km is None
+                             else f"{query_body} from sites within {query_km} km")
                 if not any(o.visible_now for o in outlooks):
                     st.info(
                         f"{query_body} can't be seen from any of these sites right now. "
@@ -161,7 +193,14 @@ if page == "Live Conditions":
                 ]
                 st.plotly_chart(sites_map(lat, lon, query_km, markers), width="stretch")
 
-                for o in outlooks:
+                ranked_outlooks = sorted(
+                    outlooks,
+                    key=lambda outlook: (
+                        -scores[outlook.site.site_id].combined
+                        if outlook.site.site_id in scores else float("inf")
+                    ),
+                )
+                for o in ranked_outlooks:
                     status = status_of(o)
                     with st.container(border=True):
                         name_col, badge_col = st.columns([4, 1], vertical_alignment="center")
@@ -169,6 +208,8 @@ if page == "Live Conditions":
                         badge_col.badge(status, color=STATUS_BADGE_COLORS[status])
                         score_col, from_col, until_col = st.columns(3)
                         score_col.metric("Score", score_text(o))
+                        if o.site.site_id in score_errors:
+                            st.warning(f"Score unavailable: {score_errors[o.site.site_id]}")
                         from_col.metric("Visible from", visible_from(o))
                         until_col.metric("Visible until", visible_until(o))
                         sunset = local_time(o.sunset_utc) if o.sunset_utc else "—"
@@ -178,7 +219,11 @@ if page == "Live Conditions":
                             if error:
                                 st.warning(f"Weather unavailable: {error}")
                             elif reading is None:
-                                st.info("No forecast slot is close enough to this viewing window.")
+                                st.info(
+                                    "Score unavailable for this viewing window: no valid weather "
+                                    "forecast is within 90 minutes before or after its start time. "
+                                    "A score requires a forecast within that range."
+                                )
                             else:
                                 def value(number, unit):
                                     return f"{number:g}{unit}" if number is not None else "Unavailable"
@@ -201,11 +246,14 @@ if page == "Live Conditions":
                     f"Times are in {local_tz.key}. Visible means at least "
                     f"{planner.min_altitude_deg:.0f}° above the horizon with a dark enough sky "
                     "(weather not included). Forecasts use the nearest three-hour slot within "
-                    "90 minutes of the start of the viewing window. A combined score is "
-                    "unavailable until all astronomy scoring inputs are implemented."
+                    "90 minutes of the start of the viewing window. Scores combine forecast "
+                    "weather with target altitude, twilight darkness and lunar illumination "
+                    "at the viewing-window start. Astronomy suitability uses planning heuristics; "
+                    "lunar observing is not penalized for daylight or moonlight."
                 )
     # TODO: let the user add/select locations and display current conditions.
 
 elif page == "Analytics":
     st.header("Analytics")
-    # TODO: at least 2 charts built from your logged history (see src/weather_app/analytics.py).
+    from weather_app.analytics_ui import render_analytics
+    render_analytics(planner, viewer_timezone())

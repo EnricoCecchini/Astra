@@ -103,3 +103,20 @@ uv run python -m unittest discover -s tests -v
   historical weather storage, and analytics are not yet integrated.
 - API keys are local secrets: each contributor must create `variables.env`
   from `variables.env.example` and supply their own key, never commit it.
+
+### Periodic weather collection
+
+Run `.venv\Scripts\python.exe scripts/collect_weather.py` to collect current
+weather and forecasts for every site in `data/sites.csv` immediately and every
+300 seconds afterward. Use `--once` for a single collection or `--interval 600`
+for a different interval. Current readings append to `data/historical_weather.csv`
+and forecast slots to `data/forecast_weather.csv`; fetch times distinguish repeated
+forecast snapshots. Failed requests are logged and other sites still run.
+
+The local background instance writes `.weather-collector/collector.log` and its
+process ID to `.weather-collector/collector.pid`. Stop that instance in PowerShell
+with `Stop-Process -Id (Get-Content .weather-collector/collector.pid)` after checking
+the PID still belongs to the collector. It runs while the computer is awake and
+does not automatically restart after reboot or sign-out. Starting the command
+above in a terminal creates a foreground instance; stop it with Ctrl+C. Avoid
+starting a second instance while the background collector is active.
