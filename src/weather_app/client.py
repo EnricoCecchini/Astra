@@ -3,11 +3,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import isfinite
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from .config import OPEN_WEATHER_BASE_URL, get_api_key
+from .storage import DATA_DIR, append_weather
 
 
 class WeatherError(Exception):
@@ -62,9 +64,11 @@ class BaseAPIClient:
 class OpenWeatherClient(BaseAPIClient):
     """Retrieve current conditions and three-hour forecast slots in metric units."""
 
-    def __init__(self, api_key: str | None = None, timeout: float = 10):
+    def __init__(self, api_key: str | None = None, timeout: float = 10,
+                 data_dir: str | Path = DATA_DIR):
         super().__init__(OPEN_WEATHER_BASE_URL, timeout)
         self._api_key = api_key.strip() if api_key else get_api_key()
+        self.data_dir = Path(data_dir)
         if not self._api_key or self._api_key == "your_key_here":
             raise ValueError("Set OPENWEATHER_API_KEY in variables.env before requesting weather.")
 
@@ -75,8 +79,10 @@ class OpenWeatherClient(BaseAPIClient):
         return self.get_json(endpoint, {"lat": latitude, "lon": longitude, "appid": self._api_key, "units": "metric"})
 
     def current_weather(self, latitude: float, longitude: float) -> WeatherReading:
-        """Return a current observation for the requested coordinates."""
-        return self._parse(self._request("weather", latitude, longitude), latitude, longitude, "current")
+        """Fetch a current observation and append it to historical_weather.csv."""
+        reading = self._parse(self._request("weather", latitude, longitude), latitude, longitude, "current")
+        self._save_readings([reading], "historical_weather.csv")
+        return reading
 
     def forecast(self, latitude: float, longitude: float) -> list[WeatherReading]:
         """Return the available five-day forecast, typically at three-hour intervals."""
@@ -93,7 +99,14 @@ class OpenWeatherClient(BaseAPIClient):
                 continue
         if not readings:
             raise WeatherError("Weather forecast contains no valid forecast slots.")
+        self._save_readings(readings, "forecast_weather.csv")
         return readings
+
+    def _save_readings(self, readings: list[WeatherReading], filename: str) -> None:
+        try:
+            append_weather(readings, self.data_dir / filename)
+        except (OSError, ValueError) as exc:
+            raise WeatherError(f"Could not save weather history to {filename}.") from exc
 
     @staticmethod
     def _parse(data: dict, latitude: float, longitude: float, kind: str) -> WeatherReading:

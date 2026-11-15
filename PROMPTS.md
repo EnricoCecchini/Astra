@@ -294,3 +294,15 @@ combined-score integration.
 **Checked:** Reviewed the sort against numeric combined scores and missing-score handling; the existing Streamlit integration check passed. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification.
+
+---
+
+## Feature: Current and forecast weather CSV history
+
+**Asked:** "Append the current weather data from the api to historical_weather.csv and the forecast data to a forecast_weather.csv in the data directory"
+
+**Got:** Added `storage.append_weather()` and automatic logging in `OpenWeatherClient.current_weather()` and `.forecast()`. Current observations append to `data/historical_weather.csv`; valid forecast slots append to `data/forecast_weather.csv`. Rows include UTC fetch time, API timestamp, coordinates, reading kind, normalized weather values and description. Headers are written once, optional missing values are blank, and existing rows are preserved. The client's optional `data_dir` supports isolated tests.
+
+**Checked:** All 18 unittest checks passed, including repeated appends and separate current/forecast files. Fetched live data for Madrid centre, Navacerrada and Yebes (within 100 km of Madrid): appended 3 current observations and 119 valid forecast slots. Navacerrada's invalid humidity slot was skipped. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification. Logging occurs on fresh API calls; cached Streamlit forecasts do not generate additional API-history rows.

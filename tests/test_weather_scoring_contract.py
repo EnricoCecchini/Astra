@@ -29,9 +29,9 @@ class WeatherScoringContractTests(unittest.TestCase):
         get.return_value = response
         # Exercise the forecast endpoint's list structure and normalization.
         response.json.return_value = {"list": [response.json.return_value]}
-        reading = OpenWeatherClient(api_key="test-key").forecast(40.4169, -3.7035)[0]
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
+        reading = OpenWeatherClient(api_key="test-key", data_dir=temporary.name).forecast(40.4169, -3.7035)[0]
         score = AstroSuitabilityScorer(output_path=Path(temporary.name) / "scores.csv").score(
             site_id="test-site",
             timestamp=reading.timestamp,
