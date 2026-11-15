@@ -14,10 +14,16 @@ from weather_app.astronomy import EPHEMERIS_DIR, EPHEMERIS_FILE
 from weather_app.models import AstroSuitabilityScorer
 
 
+@unittest.skipUnless((EPHEMERIS_DIR / EPHEMERIS_FILE).exists(),
+                     "Run the app once to cache the astronomy ephemeris")
 class AppScoringTests(unittest.TestCase):
-    @unittest.skipUnless((EPHEMERIS_DIR / EPHEMERIS_FILE).exists(),
-                         "Run the app once to cache the astronomy ephemeris")
     def test_visible_sites_show_and_save_real_scores(self):
+        self.check_search(100, 3)
+
+    def test_no_distance_preference_returns_all_ten_sites(self):
+        self.check_search(None, 10)
+
+    def check_search(self, distance, expected_sites):
         when = datetime(2026, 11, 15, 21, tzinfo=timezone.utc)
         readings = [WeatherReading(
             latitude=40.4, longitude=-3.7, timestamp=when + timedelta(hours=i),
@@ -38,11 +44,13 @@ class AppScoringTests(unittest.TestCase):
                 clock.now.return_value = when
                 app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60)
                 app.session_state["user_location"] = (40.4169, -3.7035)
-                app.session_state["sites_query"] = ("Saturn", 100)
+                app.session_state["sites_query"] = ("Saturn", distance)
                 app.run()
             self.assertFalse(app.exception, str(app.exception))
             scores = [metric.value for metric in app.metric if metric.label == "Score"]
             self.assertTrue(scores)
+            self.assertEqual(len(scores), expected_sites)
+            self.assertIn("No preference", app.selectbox[1].options)
             self.assertTrue(all(value.endswith("/100") for value in scores),
                             (scores, [warning.value for warning in app.warning]))
             with output.open(newline="", encoding="utf-8") as file:

@@ -47,7 +47,7 @@ def viewer_timezone() -> ZoneInfo:
 
 planner = get_planner()
 CELESTIAL_BODY = planner.celestial_bodies
-TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100]
+TRAVEL_DISTANCE_OPTIONS_KM = [5, 10, 15, 30, 50, 100, None]
 
 st.title("Weather Insights")
 
@@ -75,7 +75,7 @@ if page == "Live Conditions":
         max_travel_km = st.selectbox(
             "Maximum travel distance",
             TRAVEL_DISTANCE_OPTIONS_KM,
-            format_func=lambda km: f"{km} km",
+            format_func=lambda km: "No preference" if km is None else f"{km} km",
         )
     with button_col:
         if st.button("Get Sites", type="primary", width="stretch"):
@@ -91,7 +91,8 @@ if page == "Live Conditions":
             lat, lon = st.session_state["user_location"]
             outlooks = planner.site_outlooks(query_body, lat, lon, query_km)
             if not outlooks:
-                st.info(f"There are no observing sites within {query_km} km of your location.")
+                st.info("There are no configured observing sites." if query_km is None
+                        else f"There are no observing sites within {query_km} km of your location.")
             else:
                 local_tz = viewer_timezone()
                 forecasts = {}
@@ -167,7 +168,8 @@ if page == "Live Conditions":
                         f"{outlook.altitude_deg:.0f}° above the horizon"
                     )
 
-                st.subheader(f"{query_body} from sites within {query_km} km")
+                st.subheader(f"{query_body} from all observing sites" if query_km is None
+                             else f"{query_body} from sites within {query_km} km")
                 if not any(o.visible_now for o in outlooks):
                     st.info(
                         f"{query_body} can't be seen from any of these sites right now. "

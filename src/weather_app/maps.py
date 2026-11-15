@@ -7,7 +7,7 @@ from math import asin, atan2, cos, degrees, log2, radians, sin
 
 import plotly.graph_objects as go
 
-from .utils import EARTH_RADIUS_KM
+from .utils import EARTH_RADIUS_KM, haversine_km
 
 # Marker colour per visibility status (distinguishable with common colour blindness).
 STATUS_COLORS = {
@@ -52,22 +52,32 @@ def zoom_for_radius(lat: float, radius_km: float, height_px: int = MAP_HEIGHT_PX
 
 
 def sites_map(
-    user_lat: float, user_lon: float, radius_km: float, markers: list[SiteMarker]
+    user_lat: float, user_lon: float, radius_km: float | None, markers: list[SiteMarker]
 ) -> go.Figure:
     """Plotly map: travel radius, the user's position and one marker per site."""
     fig = go.Figure()
 
-    circle_lats, circle_lons = circle_points(user_lat, user_lon, radius_km)
-    fig.add_trace(
-        go.Scattermap(
-            lat=circle_lats,
-            lon=circle_lons,
-            mode="lines",
-            line={"color": USER_COLOR, "width": 1.5},
-            name=f"Travel radius ({radius_km} km)",
-            hoverinfo="skip",
+    center_lat, center_lon = user_lat, user_lon
+    if radius_km is not None:
+        circle_lats, circle_lons = circle_points(user_lat, user_lon, radius_km)
+        fig.add_trace(
+            go.Scattermap(
+                lat=circle_lats,
+                lon=circle_lons,
+                mode="lines",
+                line={"color": USER_COLOR, "width": 1.5},
+                name=f"Travel radius ({radius_km} km)",
+                hoverinfo="skip",
+            )
         )
-    )
+        display_radius = radius_km
+    else:
+        latitudes = [user_lat, *[m.latitude for m in markers]]
+        longitudes = [user_lon, *[m.longitude for m in markers]]
+        center_lat = (min(latitudes) + max(latitudes)) / 2
+        center_lon = (min(longitudes) + max(longitudes)) / 2
+        display_radius = max(1, max(haversine_km(center_lat, center_lon, lat, lon)
+                                   for lat, lon in zip(latitudes, longitudes)))
 
     for status, color in STATUS_COLORS.items():
         group = [m for m in markers if m.status == status]
@@ -107,8 +117,8 @@ def sites_map(
     fig.update_layout(
         map={
             "style": "carto-positron",
-            "center": {"lat": user_lat, "lon": user_lon},
-            "zoom": zoom_for_radius(user_lat, radius_km),
+            "center": {"lat": center_lat, "lon": center_lon},
+            "zoom": max(0, min(18, zoom_for_radius(center_lat, display_radius))),
         },
         height=MAP_HEIGHT_PX,
         margin={"l": 0, "r": 0, "t": 0, "b": 0},

@@ -342,3 +342,15 @@ combined-score integration.
 **Checked:** All 24 unittest checks passed. Known values cover hourly averages, nighttime ranking and percentages, weighted contributions summing to 84, observation deduplication and latest forecast issue selection. Chart checks cover threshold lines, ordered ranking, empty heatmap cells, two forecast axes and best-window shading. Streamlit AppTest renders all five charts with controlled nighttime observations and forecasts. The real-data Analytics page runs without exceptions and correctly shows no nighttime ranking until nighttime observations are collected. Existing CSV histories were not modified by tests. `git diff --check` passed.
 
 **Kept as-is / changed / rejected:** Kept after verification. Historical charts use observed weather-only S_W; the forecast is labelled separately, and missing data remains blank rather than being filled with invented scores.
+
+---
+
+## Feature: No distance preference
+
+**Asked:** "Let's include an option of no preference in the live conditions tab so that users that don't care about the distance have access to all possible viewing alternatives"
+
+**Got:** Added No preference to the maximum-travel-distance selector. The planner accepts a None distance limit and returns every configured site. Live Conditions headings reflect the unrestricted search, while the map omits the travel-radius circle and fits all sites and the user's location. Score ordering and visibility windows still apply.
+
+**Checked:** All 25 unittest checks passed. Streamlit integration checks confirm the unrestricted search displays ten site cards and the existing 100 km search displays three, with generated scores persisted only to temporary files. `git diff --check` passed.
+
+**Kept as-is / changed / rejected:** Kept after verification. All alternatives means the sites configured in data/sites.csv.

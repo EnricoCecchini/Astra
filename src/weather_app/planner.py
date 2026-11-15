@@ -58,10 +58,11 @@ class Planner:
         self._moon = ephemeris["moon"]
         self._timescale = skyfield_load.timescale()
 
-    def sites_within(self, origin_lat: float, origin_lon: float, max_distance_km: float):
-        """Sites no further than ``max_distance_km`` from the origin, nearest first."""
+    def sites_within(self, origin_lat: float, origin_lon: float, max_distance_km: float | None):
+        """Sites within range, or every site when the distance limit is None."""
         in_range = [(site, site.distance_km(origin_lat, origin_lon)) for site in self.sites]
-        in_range = [(site, d) for site, d in in_range if d <= max_distance_km]
+        if max_distance_km is not None:
+            in_range = [(site, d) for site, d in in_range if d <= max_distance_km]
         return sorted(in_range, key=lambda pair: pair[1])
 
     def sunset_for(self, site: Site, when: datetime) -> datetime | None:
@@ -116,7 +117,7 @@ class Planner:
         body_name: str,
         origin_lat: float,
         origin_lon: float,
-        max_distance_km: float,
+        max_distance_km: float | None,
         when: datetime | None = None,
     ) -> list[SiteVisibility]:
         """Every site within range, with when ``body_name`` can next be seen from it.
@@ -132,7 +133,7 @@ class Planner:
         """
         if body_name not in self.celestial_bodies:
             raise ValueError(f"Unknown celestial body: {body_name!r}")
-        if max_distance_km <= 0:
+        if max_distance_km is not None and max_distance_km <= 0:
             raise ValueError("max_distance_km must be positive")
 
         body = self.celestial_bodies[body_name]
