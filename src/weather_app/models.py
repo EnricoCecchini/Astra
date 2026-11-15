@@ -8,8 +8,8 @@ astronomy module; neither can reliably be inferred from weather alone.
 from __future__ import annotations
 
 import csv
-from dataclasses import asdict, dataclass
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from math import isfinite
 from pathlib import Path
 
@@ -28,8 +28,20 @@ def _clamp(value: float) -> float:
     return max(0.0, min(100.0, value))
 
 
+# Lower bound (inclusive) of each rating band on the 0-100 combined score.
+# 75 matches the "good conditions" threshold used by the analytics charts.
+RATING_BANDS = ((75, "Excellent"), (60, "Good"), (40, "Fair"), (0, "Poor"))
+
+
 @dataclass(frozen=True)
 class ScoreResult:
+    """Component and total suitability scores (0-100) for one site and time.
+
+    ``timestamp`` is the observing time that was scored; ``computed_at`` is
+    when the score was calculated, so the CSV log is a true time series.
+    Results order by ``combined`` score, so ``max(results)`` is the best site.
+    """
+
     timestamp: datetime
     site_id: str
     cloud: float
@@ -42,6 +54,20 @@ class ScoreResult:
     weather: float
     astronomical: float
     combined: float
+    computed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def rating(self) -> str:
+        """Plain-language band for the combined score: Excellent, Good, Fair or Poor."""
+        return next(label for floor, label in RATING_BANDS if self.combined >= floor)
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, ScoreResult):
+            return NotImplemented
+        return self.combined < other.combined
+
+    def __str__(self) -> str:
+        return f"{self.site_id}: {self.combined:.0f}/100 ({self.rating})"
 
 
 class AstroSuitabilityScorer:
@@ -148,6 +174,7 @@ class AstroSuitabilityScorer:
             output = Path(__file__).resolve().parents[2] / "data" / "scoring_output.csv"
         row = asdict(result)
         row["timestamp"] = result.timestamp.isoformat()
+        row["computed_at"] = result.computed_at.isoformat()
         columns = list(row)
         output.parent.mkdir(parents=True, exist_ok=True)
         needs_newline = False

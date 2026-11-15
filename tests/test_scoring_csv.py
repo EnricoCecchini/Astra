@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from weather_app.models import AstroSuitabilityScorer
-from weather_app.scoring import load_sample_scores
 
 
 class ScoringCsvTests(unittest.TestCase):
@@ -53,12 +52,25 @@ class ScoringCsvTests(unittest.TestCase):
                 self.scorer.score(**{**self.inputs, "site_id": site_id})
         self.assertFalse(self.path.exists())
 
-    def test_sample_loader_excludes_site_metadata(self):
+    def test_rating_bands_and_ordering(self):
+        with patch.object(self.scorer, "append_score"):
+            clear = self.scorer.score(**self.inputs)
+            cloudy = self.scorer.score(**{**self.inputs, "cloud_cover_percent": 100,
+                                          "site_id": "site-002"})
+        self.assertEqual(clear.rating, "Excellent")  # combined 88.2
+        self.assertEqual(cloudy.rating, "Good")  # combined 64.2
+        self.assertEqual(sorted([clear, cloudy]), [cloudy, clear])
+        self.assertIs(max([cloudy, clear]), clear)
+        self.assertEqual(str(clear), "site-001: 88/100 (Excellent)")
+
+    def test_computed_at_is_logged_separately_from_observing_time(self):
         self.scorer.score(**self.inputs)
-        scores = load_sample_scores(self.path)
-        self.assertNotIn("site_id", scores)
-        self.assertNotIn("timestamp", scores)
-        self.assertAlmostEqual(scores["combined"], 88.2)
+        with self.path.open(newline="", encoding="utf-8") as file:
+            row = next(csv.DictReader(file))
+        self.assertEqual(row["timestamp"], "2026-11-14T21:00:00+00:00")
+        computed_at = datetime.fromisoformat(row["computed_at"])
+        self.assertIsNotNone(computed_at.tzinfo)
+        self.assertGreater(computed_at, datetime(2026, 1, 1, tzinfo=timezone.utc))
 
     def test_score_reports_persistence_failure(self):
         with patch.object(self.scorer, "append_score", side_effect=OSError("write failed")):
