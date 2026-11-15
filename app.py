@@ -37,6 +37,36 @@ def site_forecast(latitude: float, longitude: float):
     return OpenWeatherClient().forecast(latitude, longitude)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def current_conditions(latitude: float, longitude: float):
+    """Current weather at a point, reused for 10 minutes (each fetch is logged once)."""
+    return OpenWeatherClient().current_weather(latitude, longitude)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def city_conditions(city: str):
+    """Current weather for a city name; the reading carries the city's coordinates."""
+    return OpenWeatherClient().current_weather_for_city(city)
+
+
+def show_current_conditions(reading, place: str) -> None:
+    """One row of metrics with the current weather at the user's location."""
+    st.subheader(f"Current conditions at {place}")
+
+    def shown(number, unit, digits=0):
+        return "—" if number is None else f"{number:.{digits}f} {unit}"
+
+    columns = st.columns(5)
+    columns[0].metric("Temperature", shown(reading.temperature_c, "°C", 1))
+    columns[1].metric("Cloud cover", shown(reading.cloud_cover_percent, "%"))
+    columns[2].metric("Humidity", shown(reading.humidity_percent, "%"))
+    columns[3].metric("Wind", shown(reading.wind_speed_mps, "m/s", 1))
+    visibility_km = None if reading.visibility_m is None else reading.visibility_m / 1000
+    columns[4].metric("Visibility", shown(visibility_km, "km", 1))
+    st.caption(f"{(reading.description or 'Conditions unavailable').capitalize()} · "
+               f"observed {reading.timestamp.astimezone(viewer_timezone()):%a %H:%M}.")
+
+
 def viewer_timezone() -> ZoneInfo:
     """The browser's time zone, falling back to Madrid if it is unknown."""
     try:
@@ -56,18 +86,49 @@ page = st.sidebar.radio("View", ["Live Conditions", "Analytics"])
 # Location sharing lives in the sidebar so it is available from page load
 # without taking space in the main view. streamlit-geolocation only asks the
 # browser for the location when its icon is clicked.
+# A city name is the fallback when the browser cannot or may not share a location.
 with st.sidebar:
     st.caption("📍 Your location")
     location = streamlit_geolocation()
     if location and location.get("latitude") is not None:
-        st.session_state["user_location"] = (location["latitude"], location["longitude"])
+        coords = (location["latitude"], location["longitude"])
+        # The component returns the same fix on every rerun; only a new fix
+        # should replace a city the user typed afterwards.
+        if st.session_state.get("geolocation") != coords:
+            st.session_state["geolocation"] = coords
+            st.session_state["user_location"] = coords
+            st.session_state["location_label"] = "your location"
+    with st.form("city_form", border=False):
+        city = st.text_input("Or enter a city", placeholder="e.g. Madrid or Granada,ES")
+        use_city = st.form_submit_button("Use this city")
+    if use_city:
+        try:
+            city = OpenWeatherClient.validate_city(city)
+            reading = city_conditions(city)
+        except (WeatherError, ValueError) as exc:
+            st.error(str(exc))
+        else:
+            st.session_state["user_location"] = (reading.latitude, reading.longitude)
+            st.session_state["location_label"] = city
     if "user_location" in st.session_state:
-        st.caption("Location shared ✓")
+        st.caption(f"Using {st.session_state.get('location_label', 'your location')} ✓")
     else:
-        st.caption("Click the icon and allow access in your browser.")
+        st.caption("Click the icon and allow access in your browser, or enter a city.")
 
 if page == "Live Conditions":
     st.header("Live Conditions")
+    if "user_location" in st.session_state:
+        here_lat, here_lon = st.session_state["user_location"]
+        try:
+            # Rounded so small GPS jitter reuses the cached reading.
+            here = current_conditions(round(here_lat, 3), round(here_lon, 3))
+        except (WeatherError, ValueError) as exc:
+            st.warning(f"Current conditions unavailable: {exc}")
+        else:
+            show_current_conditions(here, st.session_state.get("location_label", "your location"))
+    else:
+        st.info("Share your location with the 📍 icon in the sidebar, or enter a city, "
+                "to see current conditions and nearby observing sites.")
     body_col, distance_col, button_col = st.columns([3, 2, 1], vertical_alignment="bottom")
     with body_col:
         selected_body = st.selectbox("Celestial body", list(CELESTIAL_BODY))
@@ -86,7 +147,8 @@ if page == "Live Conditions":
     if "sites_query" in st.session_state:
         query_body, query_km = st.session_state["sites_query"]
         if "user_location" not in st.session_state:
-            st.warning("Share your location with the 📍 icon in the sidebar to find nearby sites.")
+            st.warning("Share your location with the 📍 icon in the sidebar, or enter a city, "
+                       "to find nearby sites.")
         else:
             lat, lon = st.session_state["user_location"]
             outlooks = planner.site_outlooks(query_body, lat, lon, query_km)
@@ -99,6 +161,9 @@ if page == "Live Conditions":
                 scores = {}
                 score_errors = {}
                 scorer = AstroSuitabilityScorer()
+                # Streamlit reruns this script on every interaction; score (and log) each
+                # site, target and forecast slot once per session instead of every rerun.
+                score_cache = st.session_state.setdefault("score_cache", {})
                 for outlook in outlooks:
                     if outlook.window_start_utc is None:
                         continue
@@ -113,25 +178,23 @@ if page == "Live Conditions":
                     reading, error = forecasts[outlook.site.site_id]
                     if error or reading is None:
                         continue
-                    weather_inputs = {
-                        "cloud_cover_percent": reading.cloud_cover_percent,
-                        "relative_humidity_percent": reading.humidity_percent,
-                        "visibility_m": reading.visibility_m,
-                        "wind_speed_mps": reading.wind_speed_mps,
-                    }
-                    missing = [name for name, value in weather_inputs.items() if value is None]
-                    if missing:
-                        score_errors[outlook.site.site_id] = "Missing forecast data: " + ", ".join(missing)
+                    if reading.missing_scoring_fields:
+                        score_errors[outlook.site.site_id] = (
+                            "Missing forecast data: " + ", ".join(reading.missing_scoring_fields))
                         continue
-                    try:
-                        scores[outlook.site.site_id] = scorer.score(
-                            site_id=outlook.site.site_id,
-                            timestamp=outlook.window_start_utc,
-                            **weather_inputs,
-                            **planner.scoring_inputs(outlook.site, query_body, outlook.window_start_utc),
-                        )
-                    except (ValueError, OSError) as exc:
-                        score_errors[outlook.site.site_id] = str(exc)
+                    cache_key = (outlook.site.site_id, query_body, reading)
+                    if cache_key not in score_cache:
+                        try:
+                            score_cache[cache_key] = scorer.score(
+                                site_id=outlook.site.site_id,
+                                timestamp=outlook.window_start_utc,
+                                **reading.scoring_inputs,
+                                **planner.scoring_inputs(outlook.site, query_body, outlook.window_start_utc),
+                            )
+                        except (ValueError, OSError) as exc:
+                            score_errors[outlook.site.site_id] = str(exc)
+                            continue
+                    scores[outlook.site.site_id] = score_cache[cache_key]
 
                 def local_time(moment):
                     return moment.astimezone(local_tz).strftime("%a %H:%M")
@@ -160,6 +223,10 @@ if page == "Live Conditions":
                         return f"{result.combined:.0f}/100"
                     return "Unavailable" if outlook.window_start_utc else "—"
 
+                def rating_suffix(outlook):
+                    result = scores.get(outlook.site.site_id)
+                    return f" ({result.rating})" if result is not None else ""
+
                 def where_to_look(outlook):
                     if not outlook.window_start_utc:
                         return "Stays below the horizon or in daylight"
@@ -184,7 +251,7 @@ if page == "Live Conditions":
                         status=status_of(o),
                         hover=(
                             f"<b>{o.site.name}</b><br>"
-                            f"Score: <b>{score_text(o)}</b><br>"
+                            f"Score: <b>{score_text(o)}</b>{rating_suffix(o)}<br>"
                             f"Visible from <b>{visible_from(o)}</b> until <b>{visible_until(o)}</b><br>"
                             f"{o.distance_km} km away · Sunset {local_time(o.sunset_utc) if o.sunset_utc else '—'}"
                         ),
@@ -193,12 +260,11 @@ if page == "Live Conditions":
                 ]
                 st.plotly_chart(sites_map(lat, lon, query_km, markers), width="stretch")
 
-                ranked_outlooks = sorted(
-                    outlooks,
-                    key=lambda outlook: (
-                        -scores[outlook.site.site_id].combined
-                        if outlook.site.site_id in scores else float("inf")
-                    ),
+                # ScoreResult orders by combined score; unscored sites keep their planner order.
+                scored = [o for o in outlooks if o.site.site_id in scores]
+                ranked_outlooks = (
+                    sorted(scored, key=lambda o: scores[o.site.site_id], reverse=True)
+                    + [o for o in outlooks if o.site.site_id not in scores]
                 )
                 for o in ranked_outlooks:
                     status = status_of(o)
@@ -207,7 +273,10 @@ if page == "Live Conditions":
                         name_col.markdown(f"**{o.site.name}**")
                         badge_col.badge(status, color=STATUS_BADGE_COLORS[status])
                         score_col, from_col, until_col = st.columns(3)
-                        score_col.metric("Score", score_text(o))
+                        result = scores.get(o.site.site_id)
+                        score_col.metric("Score", score_text(o),
+                                         delta=result.rating if result is not None else None,
+                                         delta_color="off")
                         if o.site.site_id in score_errors:
                             st.warning(f"Score unavailable: {score_errors[o.site.site_id]}")
                         from_col.metric("Visible from", visible_from(o))
@@ -251,7 +320,6 @@ if page == "Live Conditions":
                     "at the viewing-window start. Astronomy suitability uses planning heuristics; "
                     "lunar observing is not penalized for daylight or moonlight."
                 )
-    # TODO: let the user add/select locations and display current conditions.
 
 elif page == "Analytics":
     st.header("Analytics")
