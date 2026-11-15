@@ -9,10 +9,11 @@ target's altitude, twilight darkness and moonlight, which come from Skyfield.
 
 The app has two views:
 
-- **Live Conditions**: current weather at your location (shared from the browser,
-  or a city you type in). Below it are a map and ranked cards for every observing
-  site in range, each with its viewing window, where to look, the matching forecast
-  slot, its score and rating, and a Google Maps directions link.
+- **Live Conditions**: the latest recorded conditions at the observing site nearest
+  your location (shared from the browser, or a city you type in). Below them are a
+  map and ranked cards for every observing site in range, each with its viewing
+  window, where to look, the matching saved forecast slot, its score and rating,
+  and a Google Maps directions link.
 - **Analytics**: charts built from the weather history this app has logged.
   - Hourly weather-score trend per site.
   - Nighttime ranking of sites.
@@ -20,8 +21,12 @@ The app has two views:
   - Breakdown of each site's latest score.
   - Forecast chart of tonight's observing window for a chosen site and target.
 
-Every successful API call is appended to a CSV under `data/` with its fetch time,
-so the analytics run on real accumulated readings.
+Weather is fetched **only by the collector** (`scripts/collect_weather.py`), which
+appends every successful API call to a CSV under `data/` with its fetch time. Both
+views read the latest collected data, so using the app never adds duplicate
+readings, and the analytics run on real accumulated history. The app's only API
+call is geocoding the city name you type: it returns coordinates, and nothing is
+saved.
 
 ## Setup
 
@@ -49,7 +54,7 @@ and press **Use this city**. Then choose a target and a travel distance, and pre
 
 ## Collect weather history
 
-Analytics is only as good as the history behind it. Run the collector to log
+The app shows only what the collector has saved, so keep it running. It logs
 current weather and forecasts for every site in `data/sites.csv` immediately and
 then every 5 minutes:
 
@@ -91,6 +96,7 @@ Streamlit app are skipped until the ephemeris has been downloaded (run the app o
 │   ├── config.py               # loads the API key from variables.env
 │   ├── client.py               # BaseAPIClient, OpenWeatherClient, WeatherReading
 │   ├── storage.py              # appends readings to the CSV history
+│   ├── history.py              # reads the latest collected readings back
 │   ├── models.py               # Site, ScoreResult, AstroSuitabilityScorer
 │   ├── astronomy.py            # Skyfield ephemeris, planets, Moon, constellations
 │   ├── planner.py              # sites in range and their viewing windows
@@ -118,7 +124,7 @@ the API key and the parsing into `WeatherReading` objects. Every failure raises
 message:
 
 - the API key is rejected (401)
-- the location or city is not found (404)
+- the location or city is not found (404, or no geocoding match)
 - the rate limit is reached (429)
 - the service has a server error (5xx)
 - the request times out or cannot connect
@@ -134,9 +140,9 @@ from weather_app.client import OpenWeatherClient, WeatherError
 try:
     client = OpenWeatherClient()
     current = client.current_weather(40.4169, -3.7035)
-    madrid = client.current_weather_for_city("Madrid")
     forecast = client.forecast(40.4169, -3.7035)
-    print(current.cloud_cover_percent, len(forecast), madrid.missing_scoring_fields)
+    granada = client.geocode_city("Granada")  # coordinates only, nothing is saved
+    print(current.cloud_cover_percent, len(forecast), granada.label, granada.latitude)
 except (WeatherError, ValueError) as error:
     print(error)
 ```
@@ -144,6 +150,10 @@ except (WeatherError, ValueError) as error:
 Readings carry timezone-aware UTC timestamps. Weather fields are `None` when the
 API omits them. Current readings are appended to `data/historical_weather.csv` and
 forecast slots to `data/forecast_weather.csv`, each with a `fetched_at` time.
+
+`history.latest_fetches("current" | "forecast")` reads those files back and returns,
+for each location, the readings from its most recent collector fetch. The app uses
+this (re-read whenever a file changes) instead of calling the API.
 
 ### Scoring
 
@@ -156,14 +166,15 @@ combined score, so `sorted(results)` and `max(results)` work.
 Each score is appended to `data/scoring_output.csv` with both the scored observing
 time (`timestamp`) and when it was calculated (`computed_at`). The app scores each
 site, target and forecast slot once per session, so rerunning the page does not
-add duplicate rows. The first row of that file is the reference sample the
-contract test checks against. Older rows have an empty `computed_at` because it
-was not recorded at the time.
+add duplicate rows. Older rows have an empty `computed_at` because it was not
+recorded at the time. The contract test keeps its own fixed reference entry, so it
+does not depend on this log.
 
-The live score uses the forecast slot nearest the start of the viewing window, and
-only if it is within 90 minutes, since forecasts come in three-hour steps.
-Site forecasts are cached for 30 minutes and current conditions for 10. If one
-site's request fails, the others are still shown.
+The live score uses the slot of the site's latest saved forecast nearest the start
+of the viewing window, and only if it is within 90 minutes, since forecasts come in
+three-hour steps. A site with no saved forecast is still listed, with a note to run
+the collector. The app warns when saved data is old (current conditions over 1
+hour, forecasts over 6 hours).
 
 ### Collector process (local background instance)
 

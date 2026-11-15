@@ -452,3 +452,19 @@ combined-score integration.
 **Checked:** `uv run python -m unittest discover -s tests` passes 36 tests. New tests cover: a distinct message per failure mode; city lookup, unknown city and invalid input with no request sent; the key not being reachable as `_api_key` and absent from `repr`; rating bands and ordering; `computed_at` logging; current conditions and the city fallback in the app; and no duplicate score rows across reruns. All tests use mocks and temporary files. Not checked in a real browser.
 
 **Kept as-is / changed / rejected:** _Pending team review of `feature/fixes`._
+
+---
+
+## Feature: App reads collected data instead of fetching
+
+**Asked:** "Data should only be fetched by the automatic process. When using the buttons, use the latest fetched data for analysis instead of fetching new data to avoid duplicate entries. Fix the test to use a fixed sample entry registered in the test file. Ignore the clock issue as that is an OS bug, not code-related."
+
+**Got:**
+- New `history.py`: `latest_fetches(kind)` returns, per location, the readings from its most recent collector fetch (`SavedFetch`, with a `latest_reading` property). It skips malformed rows.
+- `app.py` no longer requests weather. Site scores use each site's latest saved forecast. Current conditions show the latest saved observation at the site nearest the user. Both warn when the data is old and point to the collector. The logs are re-parsed only when a file's modification time changes.
+- The city box uses OpenWeather's Geocoding API through `OpenWeatherClient.geocode_city()`, which returns a `Place` (coordinates and `label` property) and saves nothing. This replaced `current_weather_for_city()`, which had logged a reading and caused a second, rounded-coordinate fetch. To support it, `BaseAPIClient.get_json` accepts a `base_url` override and an expected JSON type.
+- `test_weather_scoring_contract.py` now holds its reference entry (`SAMPLE`) in the test file instead of reading the first row of `data/scoring_output.csv`.
+
+**Checked:** All 42 unittest checks pass. The app tests make any weather HTTP request raise, and assert that it never happens across searches, reruns, current conditions and city lookup. They also cover a site with no saved forecast and an empty history. On the real CSVs, `latest_fetches` finds the latest collector batch for all 10 sites in about 0.06 s.
+
+**Kept as-is / changed / rejected:** _Pending team review._ The clock offset seen in app-logged rows was left alone, as instructed (an OS issue).
